@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import PhoneScreen from "../../components/navigation/PhoneScreen";
 import Icon from "../../components/ui/Icon";
-import palette from "../../constants/colors";
+import { palette } from "../../constants/colors";
 
 const STATS = [
   { v: "248", l: "Pings" },

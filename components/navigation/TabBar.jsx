@@ -1,13 +1,15 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
+import { View, StyleSheet, Platform, Pressable, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSegments } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Icon from "../ui/Icon";
-import palette from "../../constants/colors";
+import { palette } from "../../constants/colors";
 
 /**
  * Tabs in order: home, reels, create (center FAB), gists/messages, profile.
  * Used as `tabBar={(props) => <TabBar {...props} />}` in app/(tabs)/_layout.jsx
+ * Hidden on deep gist thread routes: (tabs)/gists/[id]
  */
 const TABS = [
   { name: "index", label: "Home", icon: "home" },
@@ -19,14 +21,14 @@ const TABS = [
 
 export default function TabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
+  const segments = useSegments();
+
+  // Hide the tab bar inside a 1-1 gist thread: segments = ['(tabs)', 'gists', '[id]']
+  const inThread = segments[0] === "(tabs)" && segments[1] === "gists" && segments.length > 2;
+  if (inThread) return null;
 
   return (
-    <View
-      style={[
-        styles.wrap,
-        { paddingBottom: Math.max(insets.bottom, 10) },
-      ]}
-    >
+    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       <View style={styles.bar}>
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
@@ -83,10 +85,7 @@ export default function TabBar({ state, descriptors, navigation }) {
               accessibilityLabel={tab.label}
               onPress={onPress}
               onLongPress={onLongPress}
-              style={({ pressed }) => [
-                styles.tab,
-                pressed && styles.tabPressed,
-              ]}
+              style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
             >
               <View style={[styles.iconWrap, isFocused && styles.iconWrapActive]}>
                 <Icon
@@ -189,3 +188,4 @@ const styles = StyleSheet.create({
     borderColor: palette.background,
   },
 });
+

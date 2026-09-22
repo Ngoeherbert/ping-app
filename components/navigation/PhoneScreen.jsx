@@ -1,7 +1,7 @@
 import React from "react";
 import { View, StyleSheet, StatusBar, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import palette from "../../constants/colors";
+import { palette } from "../../constants/colors";
 
 /**
  * PhoneScreen — shared phone-first screen wrapper.

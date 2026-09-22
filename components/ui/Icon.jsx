@@ -4,7 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import {
   Home05Icon,
   Search01Icon,
-  Notification03Icon,
+  BellIcon,
   Comment02Icon,
   User02Icon,
   Settings01Icon,
@@ -40,15 +40,21 @@ import {
   Clock01Icon,
   FilterIcon,
   Call02Icon,
-  Attachment01Icon,
+  AddCircleIcon,
   SmileIcon,
   ClapperboardIcon,
+  AudioLinesIcon,
+  ClockFadingIcon,
+  File02Icon,
+  KeyboardIcon,
+  KeyboardOffIcon,
+  Gamepad01Icon,
 } from "@hugeicons/core-free-icons";
 
 const icons = {
   home: Home05Icon,
   search: Search01Icon,
-  notifications: Notification03Icon,
+  notifications: BellIcon,
   messages: Comment02Icon,
   profile: User02Icon,
   settings: Settings01Icon,
@@ -58,6 +64,7 @@ const icons = {
   forward: ArrowRight01Icon,
   more: MoreHorizontalIcon,
   close: Cancel01Icon,
+  game: Gamepad01Icon,
 
   plus: Add01Icon,
   check: Tick01Icon,
@@ -78,11 +85,15 @@ const icons = {
   video: Video01Icon,
   image: Image01Icon,
   microphone: Mic01Icon,
+  soundWave: AudioLinesIcon,
   music: MusicNote01Icon,
   play: PlayIcon,
   pause: PauseIcon,
   volume: VolumeHighIcon,
   mute: VolumeMute02Icon,
+  viewOnce: ClockFadingIcon,
+  keyboard: KeyboardIcon,
+  keyboardHide: KeyboardOffIcon,
 
   location: Location01Icon,
   link: Link01Icon,
@@ -92,7 +103,8 @@ const icons = {
   filter: FilterIcon,
 
   phone: Call02Icon,
-  attachment: Attachment01Icon,
+  attachment: AddCircleIcon,
+  file: File02Icon,
   emoji: SmileIcon,
 };
 

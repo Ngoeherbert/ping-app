@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable } from "react-native";
 import { router } from "expo-router";
 import PhoneScreen from "../../components/navigation/PhoneScreen";
 import Icon from "../../components/ui/Icon";
-import palette from "../../constants/colors";
+import { palette } from "../../constants/colors";
 
 const OPTIONS = [
   { icon: "edit", label: "New Ping", hint: "Share a thought" },

@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import PhoneScreen from "../../components/navigation/PhoneScreen";
 import Icon from "../../components/ui/Icon";
-import palette from "../../constants/colors";
+import { palette } from "../../constants/colors";
 
 const PINGS = [
   { id: "1", user: "Adaeze O.", time: "2m", text: "Who's at the beach house this weekend? Bringing snacks.", likes: 24, replies: 8 },

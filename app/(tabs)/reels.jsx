@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, FlatList, Dimensions } from "react-native";
 import PhoneScreen from "../../components/navigation/PhoneScreen";
 import Icon from "../../components/ui/Icon";
-import palette from "../../constants/colors";
+import { palette } from "../../constants/colors";
 
 const { width } = Dimensions.get("window");
 const CARD = (width - 48) / 2;
