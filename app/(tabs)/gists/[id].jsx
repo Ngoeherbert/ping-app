@@ -27,11 +27,46 @@ function now() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function DateDivider({ label }) {
+  return (
+    <View style={styles.dateDividerWrap}>
+      <View style={styles.dateDividerLine} />
+      <Text style={styles.dateDividerText}>{label}</Text>
+      <View style={styles.dateDividerLine} />
+    </View>
+  );
+}
+
+function withDateDividers(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+
+  const result = [];
+  let lastDate = null;
+
+  for (const msg of messages) {
+    const msgDate = msg.date ?? getDateLabel(msg.time);
+    if (msgDate !== lastDate) {
+      result.push({ id: `divider-${String(msgDate)}`, type: "divider", label: msgDate });
+      lastDate = msgDate;
+    }
+    result.push(msg);
+  }
+
+  return result;
+}
+
+function getDateLabel(timeStr) {
+  if (!timeStr) return "Today";
+  if (/^\d{1,2}:\d{2}/.test(timeStr)) return "Today";
+  return timeStr;
+}
+
 export default function GistThreadScreen() {
   const { id } = useLocalSearchParams();
   const conversation = getConversation(id);
   const seed = useMemo(() => getThread(id), [id]);
   const [messages, setMessages] = useState(seed);
+  const listData = useMemo(() => withDateDividers(messages), [messages]);
   const [attachOpen, setAttachOpen] = useState(false);
   // Whether the keyboard was up when the panel opened — the panel only hands
   // the space back to the keyboard if the keyboard was there to begin with.
@@ -186,20 +221,62 @@ export default function GistThreadScreen() {
         >
           <Icon name="back" size={22} color={palette.ink} />
         </Pressable>
-        <Avatar uri={conversation?.avatar} name={conversation?.name ?? "?"} size={40} />
-        <View style={styles.headMid}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Chat info"
+          onPress={() =>
+            router.push({
+              pathname: "/(tabs)/gists/[id]/chat-info",
+              params: { id: String(id) },
+            })
+          }
+          style={styles.headAvatar}
+        >
+          <Avatar uri={conversation?.avatar} name={conversation?.name ?? "?"} size={40} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="User info"
+          onPress={() =>
+            router.push({
+              pathname: "/(tabs)/gists/[id]/chat-info",
+              params: { id: String(id) },
+            })
+          }
+          style={styles.headMid}
+        >
           <Text style={styles.name} numberOfLines={1}>
             {conversation?.name ?? "Gist"}
           </Text>
           <Text style={styles.presence}>
             {typing ? "typing…" : conversation?.isOnline ? "Online" : "Last seen recently"}
           </Text>
-        </View>
-        <Pressable style={styles.headBtn}>
+        </Pressable>
+        <Pressable
+          style={styles.headBtn}
+          onPress={() =>
+            router.push({
+              pathname: "/(tabs)/gists/[id]/voice-call",
+              params: { id: String(id) },
+            })
+          }
+          accessibilityRole="button"
+          accessibilityLabel="Voice call"
+        >
           <Icon name="phone" size={20} color={palette.ink} />
         </Pressable>
-        <Pressable style={styles.headBtn}>
-          <Icon name="more" size={20} color={palette.ink} />
+        <Pressable
+          style={styles.headBtn}
+          onPress={() =>
+            router.push({
+              pathname: "/(tabs)/gists/[id]/video-call",
+              params: { id: String(id) },
+            })
+          }
+          accessibilityRole="button"
+          accessibilityLabel="Video call"
+        >
+          <Icon name="video" size={20} color={palette.ink} />
         </Pressable>
       </View>
 
@@ -211,11 +288,16 @@ export default function GistThreadScreen() {
       >
         <FlatList
           ref={listRef}
-          data={messages}
+          data={listData}
           keyExtractor={(i) => String(i.id)}
           contentContainerStyle={styles.thread}
           onContentSizeChange={() => listRef.current?.scrollToEnd?.({ animated: false })}
-          renderItem={({ item }) => <MessageBubble item={item} />}
+          renderItem={({ item }) => {
+            if (item.type === "divider") {
+              return <DateDivider label={item.label} />;
+            }
+            return <MessageBubble item={item} />;
+          }}
           ListFooterComponent={
             typing ? (
               <View style={styles.typingWrap}>
@@ -267,6 +349,7 @@ const styles = StyleSheet.create({
     borderBottomColor: palette.line,
   },
   back: { padding: 8 },
+  headAvatar: { padding: 4 },
   headMid: { flex: 1, minWidth: 0 },
   name: { fontSize: 16, fontWeight: "700", color: palette.ink },
   presence: { fontSize: 12, color: palette.muted, marginTop: 1 },
@@ -274,4 +357,22 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   thread: { paddingTop: 14, paddingBottom: 10 },
   typingWrap: { paddingHorizontal: 14, paddingVertical: 6 },
+  dateDividerWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 10,
+    gap: 8,
+  },
+  dateDividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: palette.line,
+  },
+  dateDividerText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: palette.muted,
+    textTransform: "capitalize",
+  },
 });

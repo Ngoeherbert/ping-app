@@ -1,6 +1,7 @@
-import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { View, Text, Pressable, StyleSheet, Animated, Easing } from "react-native";
 import Icon from "../ui/Icon";
+import { formatDuration } from "./VoiceBubble";
 
 function formatSize(bytes) {
   if (!bytes || bytes <= 0) return "";
@@ -9,16 +10,127 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const EXT_ICON = { pdf: "file-text", doc: "file-text", docx: "file-text", xls: "file-text", xlsx: "file-text", zip: "file" };
+function isPdf(mimeType, fileName) {
+  const ext = (fileName?.split(".").pop() || "").toLowerCase();
+  return (
+    mimeType === "application/pdf" ||
+    ext === "pdf"
+  );
+}
 
-export default function FileBubble({ fileName = "document.pdf", fileSize, mimeType, isMine = false, onPress }) {
+function isImageType(mimeType, fileName) {
+  const ext = (fileName?.split(".").pop() || "").toLowerCase();
+  const imageExts = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
+  return (
+    mimeType?.startsWith("image/") ||
+    imageExts.includes(ext)
+  );
+}
+
+function isVideoType(mimeType, fileName) {
+  const ext = (fileName?.split(".").pop() || "").toLowerCase();
+  const videoExts = ["mp4", "mov", "avi", "mkv", "webm", "m4v"];
+  return (
+    mimeType?.startsWith("video/") ||
+    videoExts.includes(ext)
+  );
+}
+
+function isVoiceType(mimeType, fileName) {
+  const ext = (fileName?.split(".").pop() || "").toLowerCase();
+  const audioExts = ["mp3", "wav", "m4a", "aac", "ogg", "wma"];
+  return (
+    mimeType?.startsWith("audio/") ||
+    audioExts.includes(ext)
+  );
+}
+
+export default function FileBubble({
+  fileName = "document.pdf",
+  fileSize,
+  mimeType,
+  isMine = false,
+  onPress,
+  downloaded = false,
+  downloading = false,
+  downloadError = false,
+  duration: mediaDuration = 0,
+}) {
   const ext = (fileName.split(".").pop() || "pdf").toLowerCase();
-  const icon = EXT_ICON[ext] && ["file-text"].includes(EXT_ICON[ext]) ? "file" : "file";
+  const isPdfFile = isPdf(mimeType, fileName);
+  const isImage = isImageType(mimeType, fileName);
+  const isVideo = isVideoType(mimeType, fileName);
+  const isVoice = isVoiceType(mimeType, fileName);
+
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (downloading) {
+      Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      ).start();
+    } else {
+      spinAnim.setValue(0);
+      spinAnim.stopAnimation();
+    }
+  }, [downloading, spinAnim]);
+
+  const spinRotation = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+   });
+
+  const leftIconName = isVideo ? "play" : isVoice ? "microphone" : isPdfFile ? "file" : "file";
+
+  const renderRightIcon = () => {
+    if (downloadError) {
+      return <Icon name="x" size={18} color={isMine ? "#FF6B6B" : "#E5484D"} />;
+    }
+
+    if (downloading) {
+      return (
+        <Animated.View style={{ transform: [{ rotate: spinRotation }] }}>
+          <Icon name="x" size={18} color={isMine ? "#DDDDDD" : "#555555"} />
+        </Animated.View>
+      );
+    }
+
+    if (!downloaded) {
+      return <Icon name="download" size={18} color={isMine ? "#DDDDDD" : "#555555"} />;
+    }
+
+    if (downloaded && isImage) {
+      return null;
+    }
+
+    if (downloaded && isVideo) {
+      return <Icon name="play" size={18} color={isMine ? "#DDDDDD" : "#555555"} />;
+    }
+
+    if (downloaded && isPdfFile) {
+      return <Icon name="file" size={18} color={isMine ? "#DDDDDD" : "#555555"} />;
+    }
+
+    if (downloaded && isVoice) {
+      return <Icon name="microphone" size={18} color={isMine ? "#DDDDDD" : "#555555"} />;
+    }
+
+    return <Icon name="download" size={18} color={isMine ? "#DDDDDD" : "#555555"} />;
+  };
 
   return (
     <Pressable onPress={onPress} style={styles.row}>
       <View style={[styles.tile, isMine ? styles.tileMine : styles.tileTheirs]}>
-        <Icon name={icon} size={22} color={isMine ? "#FFFFFF" : "#111111"} />
+        <Icon
+          name={leftIconName}
+          size={22}
+          color={isMine ? "#FFFFFF" : "#111111"}
+        />
         <View style={styles.extBadge}>
           <Text style={styles.extText}>{ext.slice(0, 3).toUpperCase()}</Text>
         </View>
@@ -35,8 +147,13 @@ export default function FileBubble({ fileName = "document.pdf", fileSize, mimeTy
             .filter(Boolean)
             .join(" · ")}
         </Text>
+        {isVideo && mediaDuration > 0 && (
+          <Text style={[styles.sub, isMine ? styles.subMine : styles.subTheirs]}>
+            {formatDuration(mediaDuration)}
+          </Text>
+        )}
       </View>
-      <Icon name="download" size={18} color={isMine ? "#DDDDDD" : "#555555"} />
+      {renderRightIcon()}
     </Pressable>
   );
 }

@@ -49,6 +49,13 @@ export default function ImageBubble({ uri, caption, isMine = false, onPress, ble
             <Text style={styles.retryHint}>Tap to retry</Text>
           </View>
         )}
+
+        {/* Image icon overlay, top-left corner */}
+        {loaded && !failed && (
+          <View style={styles.iconOverlay} pointerEvents="none">
+            <Icon name="image" size={18} color="#FFFFFF" />
+          </View>
+        )}
       </Pressable>
       {/* Caption sits under the tile (same as the video bubble) and is
           pinned to the media width so long text wraps instead of
@@ -90,6 +97,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  iconOverlay: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   retryHint: { marginTop: 8, fontSize: 12, fontWeight: "600", color: "#FFFFFF" },
   caption: {
     width: MEDIA_WIDTH,
@@ -101,4 +119,3 @@ const styles = StyleSheet.create({
   captionMine: { color: "#FFFFFF" },
   captionTheirs: { color: "#222222" },
 });
-
