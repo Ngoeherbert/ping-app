@@ -15,9 +15,10 @@ const actions = [
   { id: "image", label: "Photo", icon: "image" },
   { id: "video", label: "Video", icon: "video" },
   { id: "camera", label: "Camera", icon: "camera" },
-  { id: "file", label: "File", icon: "attachment" },
+  { id: "file", label: "File", icon: "file" },
   { id: "view-once", label: "View once", icon: "viewOnce" },
   { id: "location", label: "Location", icon: "location" },
+  { id: "game", label: "Game", icon: "game" },
 ];
 
 // iOS KeyboardAvoidingView animates its keyboard padding with the keyboard's

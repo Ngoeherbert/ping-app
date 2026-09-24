@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, TextInput, Pressable, StyleSheet } from "react-native";
 
 import Icon from "../ui/Icon";
+import ReplyQuote from "./ReplyQuote";
 
 export default function MessageComposer({
   onSend,
@@ -15,6 +16,9 @@ export default function MessageComposer({
   restoreKeyboard = false,
   onInputFocus,
   placeholder = "Message",
+  replyTo = null,
+  onCancelReply,
+  focusRequest = 0,
 }) {
   const [text, setText] = useState("");
   const inputRef = useRef(null);
@@ -38,6 +42,14 @@ export default function MessageComposer({
     onTyping?.(v);
   };
 
+  useEffect(() => {
+    if (focusRequest > 0) {
+      const frame = requestAnimationFrame(() => inputRef.current?.focus());
+      return () => cancelAnimationFrame(frame);
+    }
+    return undefined;
+  }, [focusRequest]);
+
   const handleSend = () => {
     const trimmed = text.trim();
 
@@ -50,7 +62,24 @@ export default function MessageComposer({
   const hasText = text.trim().length > 0;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.shell}>
+      {replyTo && (
+        <View style={styles.replyBar}>
+          <View style={styles.replyCopy}>
+            <ReplyQuote replyTo={replyTo} />
+          </View>
+          <Pressable
+            onPress={onCancelReply}
+            hitSlop={8}
+            style={styles.replyClose}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel reply"
+          >
+            <Icon name="close" size={18} color="#555555" />
+          </Pressable>
+        </View>
+      )}
+      <View style={styles.container}>
       <Pressable
         style={styles.iconButton}
         onPress={onAttachment}
@@ -123,11 +152,32 @@ export default function MessageComposer({
           />
         </Pressable>
       )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  shell: { backgroundColor: "#FFFFFF" },
+  replyBar: {
+    minHeight: 52,
+    paddingLeft: 12,
+    paddingRight: 6,
+    paddingVertical: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F7F7F8",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#E5E5E5",
+  },
+  replyCopy: { flex: 1 },
+  replyClose: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   container: {
     minHeight: 64,
     paddingHorizontal: 10,

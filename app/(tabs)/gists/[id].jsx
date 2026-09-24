@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,11 +14,15 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+import * as Haptics from "expo-haptics";
 import Avatar from "../../../components/ui/Avatar";
 import Icon from "../../../components/ui/Icon";
 import MessageBubble from "../../../components/messages/MessageBubble";
 import MessageComposer from "../../../components/messages/MessageComposer";
 import AttachmentMenu from "../../../components/messages/AttachmentMenu";
+import MediaDraft from "../../../components/messages/MediaDraft";
+import SwipeToReply from "../../../components/messages/SwipeToReply";
+import { messagePreview } from "../../../components/messages/ReplyQuote";
 import TypingIndicator from "../../../components/messages/TypingIndicator";
 import { getConversation, getThread } from "../../../lib/gists";
 import { palette } from "../../../constants/colors";
@@ -73,6 +77,9 @@ export default function GistThreadScreen() {
   const [restoreKeyboard, setRestoreKeyboard] = useState(false);
   const [typing, setTyping] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [mediaDraft, setMediaDraft] = useState(null);
+  const [focusRequest, setFocusRequest] = useState(0);
   const typingTimer = useRef(null);
   const listRef = useRef(null);
   // Layout measurements used to make the attachment panel take over the exact
@@ -103,15 +110,46 @@ export default function GistThreadScreen() {
   }, []);
 
   const push = (msg) => {
-    setMessages((m) => [
-      ...m,
+    const isMedia =
+      msg.kind === "image" || msg.kind === "photo" || msg.kind === "video";
+    const hasCaption = Boolean(String(msg.text ?? msg.caption ?? "").trim());
+
+    if (isMedia) {
+      const feedback = hasCaption
+        ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+        : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      feedback.catch(() => {});
+    }
+
+    setMessages((current) => [
+      ...current,
       { id: `m-${Date.now()}`, time: now(), status: "sent", isMine: true, kind: "text", ...msg },
     ]);
     setAttachOpen(false);
     requestAnimationFrame(() => listRef.current?.scrollToEnd?.({ animated: true }));
   };
 
-  const send = (text) => push({ kind: "text", text });
+  const replySnapshot = useCallback((message) => ({
+    id: message.id,
+    senderName: message.isMine
+      ? "You"
+      : message.senderName ?? conversation?.senderName ?? conversation?.name ?? "Them",
+    preview: messagePreview(message),
+    isMine: Boolean(message.isMine),
+  }), [conversation]);
+
+  const startReply = useCallback((message) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setAttachOpen(false);
+    setReplyingTo(replySnapshot(message));
+    if (!mediaDraft) setFocusRequest((value) => value + 1);
+  }, [mediaDraft, replySnapshot]);
+
+  const send = (text) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    push({ kind: "text", text, replyTo: replyingTo ?? undefined });
+    setReplyingTo(null);
+  };
 
   const onTyping = () => {
     setTyping(true);
@@ -119,40 +157,83 @@ export default function GistThreadScreen() {
     typingTimer.current = setTimeout(() => setTyping(false), 1800);
   };
 
-  const pickImage = async (mediaTypes) => {
+  const applyAssetToDraft = (asset, replace = false) => {
+    const kind = asset.type === "video" || asset.mimeType?.startsWith("video/")
+      ? "video"
+      : "image";
+    setMediaDraft((current) => ({
+      kind,
+      uri: asset.uri,
+      width: asset.width || undefined,
+      height: asset.height || undefined,
+      duration: asset.duration ? Math.max(0, asset.duration / 1000) : undefined,
+      fileName: asset.fileName || undefined,
+      fileSize: asset.fileSize || undefined,
+      mimeType: asset.mimeType || undefined,
+      caption: replace ? current?.caption ?? "" : "",
+      stickers: replace ? current?.stickers ?? [] : [],
+    }));
+    setAttachOpen(false);
+  };
+
+  const pickImage = async (kind, replace = false) => {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert("Permission needed", "Allow photo library access to send media.");
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Permission needed", "Allow photo library access to choose media.");
         return;
       }
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes,
-        quality: 0.8,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: [kind === "video" ? "videos" : "images"],
+        allowsEditing: false,
+        quality: 0.85,
         allowsMultipleSelection: false,
+        selectionLimit: 1,
       });
-      if (res.canceled || !res.assets?.length) return;
-      const a = res.assets[0];
-      const kind = (a.type ?? "").startsWith("video") ? "video" : "image";
-      push({ kind, uri: a.uri, duration: a.duration ? Math.round(a.duration / 1000) : undefined });
-    } catch (e) {
-      Alert.alert("Couldn't pick media", String(e?.message ?? e));
+      if (result.canceled || !result.assets?.length) return;
+      applyAssetToDraft(result.assets[0], replace);
+    } catch (error) {
+      Alert.alert("Couldn't choose media", String(error?.message ?? error));
     }
   };
 
-  const takePhoto = async () => {
+  const takePhoto = async (replace = false) => {
     try {
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert("Permission needed", "Allow camera access to take a photo.");
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Permission needed", "Allow camera access to take a photo or video.");
         return;
       }
-      const res = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-      if (res.canceled || !res.assets?.length) return;
-      push({ kind: "image", uri: res.assets[0].uri });
-    } catch (e) {
-      Alert.alert("Couldn't open camera", String(e?.message ?? e));
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images", "videos"],
+        allowsEditing: false,
+        quality: 0.85,
+        videoMaxDuration: 60,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      applyAssetToDraft(result.assets[0], replace);
+    } catch (error) {
+      Alert.alert("Couldn't open camera", String(error?.message ?? error));
     }
+  };
+
+  const sendMedia = ({ caption }) => {
+    if (!mediaDraft?.uri) return;
+    const attachment = { ...mediaDraft };
+    delete attachment.caption;
+    push({
+      ...attachment,
+      text: caption || undefined,
+      replyTo: replyingTo ?? undefined,
+    });
+    setMediaDraft(null);
+    setReplyingTo(null);
+  };
+
+  const replaceDraft = () => {
+    if (!mediaDraft) return;
+    if (mediaDraft.kind === "image") takePhoto(true);
+    else pickImage("video", true);
   };
 
   const pickFile = async () => {
@@ -176,8 +257,8 @@ export default function GistThreadScreen() {
   };
 
   const onAttach = (actionId) => {
-    if (actionId === "image") pickImage(ImagePicker.MediaTypeOptions.Images);
-    else if (actionId === "video") pickImage(ImagePicker.MediaTypeOptions.Videos);
+    if (actionId === "image") pickImage("image");
+    else if (actionId === "video") pickImage("video");
     else if (actionId === "camera") takePhoto();
     else if (actionId === "file") pickFile();
     else if (actionId === "view-once") push({ kind: "view-once", mediaType: "photo" });
@@ -296,7 +377,11 @@ export default function GistThreadScreen() {
             if (item.type === "divider") {
               return <DateDivider label={item.label} />;
             }
-            return <MessageBubble item={item} />;
+            return (
+              <SwipeToReply message={item} onReply={startReply}>
+                <MessageBubble item={item} onReply={startReply} />
+              </SwipeToReply>
+            );
           }}
           ListFooterComponent={
             typing ? (
@@ -308,19 +393,37 @@ export default function GistThreadScreen() {
         />
 
         <View onLayout={onComposerLayout}>
-          <MessageComposer
-            onSend={send}
-            attachOpen={attachOpen}
-            restoreKeyboard={restoreKeyboard}
-            onAttachment={toggleAttach}
-            onInputFocus={() => setAttachOpen(false)}
-            onCamera={takePhoto}
-            onMicPress={startVoice}
-            onMicRelease={stopVoice}
-            recording={recording}
-            onTyping={onTyping}
-            placeholder={`Message ${conversation?.name ?? ""}`}
-          />
+          {mediaDraft ? (
+            <MediaDraft
+              draft={mediaDraft}
+              replyTo={replyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+              onChange={(patch) =>
+                setMediaDraft((current) => ({ ...current, ...patch }))
+              }
+              onClose={() => setMediaDraft(null)}
+              onReplace={replaceDraft}
+              onSend={sendMedia}
+              onTyping={onTyping}
+            />
+          ) : (
+            <MessageComposer
+              onSend={send}
+              attachOpen={attachOpen}
+              restoreKeyboard={restoreKeyboard}
+              onAttachment={toggleAttach}
+              onInputFocus={() => setAttachOpen(false)}
+              onCamera={takePhoto}
+              onMicPress={startVoice}
+              onMicRelease={stopVoice}
+              recording={recording}
+              onTyping={onTyping}
+              replyTo={replyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+              focusRequest={focusRequest}
+              placeholder={`Message ${conversation?.name ?? ""}`}
+            />
+          )}
         </View>
 
         {/* AttachmentMenu is the LAST child so it grows from the bottom of the
@@ -328,7 +431,7 @@ export default function GistThreadScreen() {
             keyboard-dismiss and the panel-grow animations cancel out for the
             composer — it stays put while the panel takes the keyboard's place. */}
         <AttachmentMenu
-          visible={attachOpen}
+          visible={attachOpen && !mediaDraft}
           height={panelHeight}
           onSelect={onAttach}
         />

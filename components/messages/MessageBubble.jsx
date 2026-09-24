@@ -17,6 +17,7 @@ import FileBubble from "./FileBubble";
 import ViewOnceBubble from "./ViewOnceBubble";
 import VideoBubble from "./VideoBubble";
 import ImageBubble from "./ImageBubble";
+import ReplyQuote from "./ReplyQuote";
 const window = Dimensions.get("window");
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = window;
 
@@ -41,6 +42,7 @@ export default function MessageBubble(props) {
     type: typeProp = "text",
     onPress,
     onViewOnceOpen,
+    onReply,
   } = props;
 
   const data = useMemo(() => item ?? {}, [item]);
@@ -82,7 +84,6 @@ export default function MessageBubble(props) {
   const starredStore = useRef(new Set());
   const isStarred = starredStore.current.has(data.id);
 
-  const [menuVisible, setMenuVisible] = useState(false);
   const [reactionOnlyMode, setReactionOnlyMode] = useState(false);
   const [focusedMessage, setFocusedMessage] = useState(null);
   const [anchor, setAnchor] = useState(null); // { x, y, width, height }
@@ -135,7 +136,7 @@ export default function MessageBubble(props) {
 
   const isMedia = kind === "image" || kind === "photo" || kind === "video";
   const hasCaption = !!String(text ?? "").trim();
-  const isBareMedia = isMedia && !!uri && !hasCaption;
+  const isBareMedia = isMedia && !!uri && !hasCaption && !data.replyTo;
 
   const handleViewOnce = () => {
     if (viewed) return;
@@ -152,9 +153,11 @@ export default function MessageBubble(props) {
           <ImageBubble
             uri={uri}
             caption={hasCaption ? text : undefined}
-            bleed={!isBareMedia}
+            bleed={!isBareMedia && !data.replyTo}
             isMine={isMine}
             onPress={onPress}
+            onLongPress={openFocusOnLongPress}
+            stickers={data.stickers}
           />
         );
 
@@ -163,9 +166,11 @@ export default function MessageBubble(props) {
           <VideoBubble
             uri={uri}
             caption={hasCaption ? text : undefined}
-            bleed={!isBareMedia}
+            bleed={!isBareMedia && !data.replyTo}
             isMine={isMine}
+            onLongPress={openFocusOnLongPress}
             duration={data.duration ?? 0}
+            stickers={data.stickers}
           />
         );
 
@@ -289,6 +294,7 @@ export default function MessageBubble(props) {
         delayLongPress={400}
         accessibilityRole="button"
         accessibilityLabel={`Message from ${isMine ? "you" : "them"}: ${text}`}
+        accessibilityHint="Swipe horizontally to reply"
         style={({ pressed }) => [
           styles.bubble,
           isMine ? styles.mineBubble : styles.theirBubble,
@@ -296,6 +302,7 @@ export default function MessageBubble(props) {
           pressed && styles.bubblePressed,
         ]}
       >
+        {data.replyTo && <ReplyQuote replyTo={data.replyTo} isMine={isMine} />}
         {renderBody()}
 
         {!!currentReaction && (
@@ -399,7 +406,10 @@ export default function MessageBubble(props) {
                     },
                   ]}
                 >
-                 {renderBody()}
+                   {data.replyTo && (
+                     <ReplyQuote replyTo={data.replyTo} isMine={isMine} />
+                   )}
+                   {renderBody()}
 
                  {!!currentReaction && (
                    <Pressable
@@ -457,7 +467,7 @@ export default function MessageBubble(props) {
                     onPress={() => {
                       Haptics.selectionAsync().catch(() => {});
                       clearActiveReactionsPreview();
-                      // TODO: wire real handlers per item.id
+                      if (item.id === "reply") onReply?.(data);
                     }}
                     style={[
                       styles.menuRowFloating,

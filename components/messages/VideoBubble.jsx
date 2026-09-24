@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useVideoPlayer, VideoView } from "expo-video";
 import Icon from "../ui/Icon";
+import MediaStickerOverlay from "./MediaStickerOverlay";
 import { formatDuration } from "./VoiceBubble";
 import { CAPTION_PAD_H, MEDIA_HEIGHT, MEDIA_WIDTH } from "./media";
 
@@ -10,7 +11,9 @@ export default function VideoBubble({
   caption,
   isMine = false,
   bleed = true,
+  onLongPress,
   duration: videoDuration = 0,
+  stickers = [],
 }) {
   const player = useVideoPlayer(
     uri ? { uri, contentType: "progressive" } : null,
@@ -52,7 +55,12 @@ export default function VideoBubble({
 
   return (
     <View style={[styles.wrap, !bleed && styles.wrapFlush]}>
-      <Pressable onPress={toggle} style={styles.videoWrap}>
+      <Pressable
+        onPress={toggle}
+        onLongPress={onLongPress}
+        delayLongPress={400}
+        style={styles.videoWrap}
+      >
         {/* Native surface stays mounted (so first frame loads) but is
             hidden under our cover until the video is ready — the native
             placeholder glyph never shows through. */}
@@ -94,6 +102,7 @@ export default function VideoBubble({
             <Text style={styles.retryHint}>Tap to retry</Text>
           </View>
         )}
+        <MediaStickerOverlay stickers={stickers} />
       </Pressable>
       {!!caption && (
         <Text

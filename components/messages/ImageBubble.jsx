@@ -1,9 +1,18 @@
 import React, { useState } from "react";
 import { View, Text, Pressable, Image, StyleSheet } from "react-native";
 import Icon from "../ui/Icon";
+import MediaStickerOverlay from "./MediaStickerOverlay";
 import { CAPTION_PAD_H, MEDIA_HEIGHT, MEDIA_WIDTH } from "./media";
 
-export default function ImageBubble({ uri, caption, isMine = false, onPress, bleed = true }) {
+export default function ImageBubble({
+  uri,
+  caption,
+  isMine = false,
+  onPress,
+  onLongPress,
+  bleed = true,
+  stickers = [],
+}) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -26,7 +35,12 @@ export default function ImageBubble({ uri, caption, isMine = false, onPress, ble
 
   return (
     <View style={[styles.wrap, !bleed && styles.wrapFlush]}>
-      <Pressable onPress={handlePress} style={styles.mediaWrap}>
+      <Pressable
+        onPress={handlePress}
+        onLongPress={onLongPress}
+        delayLongPress={400}
+        style={styles.mediaWrap}
+      >
         <Image
           key={attempt}
           source={{ uri }}
@@ -56,6 +70,7 @@ export default function ImageBubble({ uri, caption, isMine = false, onPress, ble
             <Icon name="image" size={18} color="#FFFFFF" />
           </View>
         )}
+        <MediaStickerOverlay stickers={stickers} />
       </Pressable>
       {/* Caption sits under the tile (same as the video bubble) and is
           pinned to the media width so long text wraps instead of
