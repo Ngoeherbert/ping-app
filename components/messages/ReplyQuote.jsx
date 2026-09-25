@@ -2,10 +2,25 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 export function messagePreview(message) {
+  const kind = message?.kind ?? message?.type;
+  const isViewOnce = message?.viewOnce === true || ["view-once", "view_once", "viewonce"].includes(kind);
+
+  if (isViewOnce) {
+    if (message?.mediaType === "text" || kind === "text") return "View-once text";
+    if (message?.mediaType === "video" || kind === "video") return "View-once video";
+    if (["voice", "audio"].includes(message?.mediaType) || ["voice", "audio"].includes(kind)) {
+      return "View-once voice message";
+    }
+    if (["file", "document"].includes(message?.mediaType) || ["file", "document"].includes(kind)) {
+      return "View-once file";
+    }
+    return "View-once photo";
+  }
+
   const text = message?.text ?? message?.caption ?? message?.message;
   if (String(text ?? "").trim()) return String(text).trim();
 
-  switch (message?.kind ?? message?.type) {
+  switch (kind) {
     case "image":
     case "photo":
       return "Photo";

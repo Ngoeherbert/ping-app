@@ -16,10 +16,11 @@ const actions = [
   { id: "video", label: "Video", icon: "video" },
   { id: "camera", label: "Camera", icon: "camera" },
   { id: "file", label: "File", icon: "file" },
-  { id: "view-once", label: "View once", icon: "viewOnce" },
   { id: "location", label: "Location", icon: "location" },
   { id: "game", label: "Game", icon: "game" },
 ];
+
+const actionRows = [actions.slice(0, 3), actions.slice(3, 6)];
 
 // iOS KeyboardAvoidingView animates its keyboard padding with the keyboard's
 // own 250ms curve, so the panel uses the same timing to swap in seamlessly.
@@ -51,21 +52,25 @@ export default function AttachmentMenu({
 
   return (
     <Animated.View style={[styles.container, { height: anim }]}>
-      <View style={styles.grid}>
-        {actions.map((action) => (
-          <Pressable
-            key={action.id}
-            style={styles.action}
-            onPress={() => onSelect?.(action.id)}
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-          >
-            <View style={styles.iconContainer}>
-              <Icon name={action.icon} size={22} color="#222222" />
-            </View>
+      <View style={styles.rows}>
+        {actionRows.map((row, rowIndex) => (
+          <View style={styles.row} key={`attachment-row-${rowIndex}`}>
+            {row.map((action) => (
+              <Pressable
+                key={action.id}
+                style={styles.action}
+                onPress={() => onSelect?.(action.id)}
+                accessibilityRole="button"
+                accessibilityLabel={action.label}
+              >
+                <View style={styles.iconContainer}>
+                  <Icon name={action.icon} size={22} color="#222222" />
+                </View>
 
-            <Text style={styles.label}>{action.label}</Text>
-          </Pressable>
+                <Text style={styles.label}>{action.label}</Text>
+              </Pressable>
+            ))}
+          </View>
         ))}
       </View>
     </Animated.View>
@@ -80,18 +85,21 @@ const styles = StyleSheet.create({
     borderTopColor: "#E5E5E5",
   },
 
-  grid: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignContent: "center",
-    justifyContent: "space-between",
+  rows: {
     paddingHorizontal: 22,
-    rowGap: 18,
+    paddingTop: 12,
+    rowGap: 10,
+  },
+
+  row: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
 
   action: {
-    width: 64,
+    width: "33.333%",
     alignItems: "center",
   },
 

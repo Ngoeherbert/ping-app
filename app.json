@@ -2,6 +2,7 @@
   "expo": {
     "name": "ping-app",
     "slug": "ping-app",
+    "scheme": "pingapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -29,7 +30,12 @@
       "expo-router",
       "expo-font",
       "expo-video",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Ping to use your microphone to record voice notes."
+        }
+      ],
       "expo-secure-store",
       "expo-sqlite",
       "expo-asset",
@@ -38,7 +44,7 @@
         {
           "photosPermission": "Allow Ping to access your photos to share them.",
           "cameraPermission": "Allow Ping to use your camera to share photos and videos.",
-          "microphonePermission": "Allow Ping to use your microphone to record videos."
+          "microphonePermission": "Allow Ping to use your microphone for videos and voice notes."
         }
       ]
     ]

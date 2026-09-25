@@ -21,10 +21,12 @@ import MessageBubble from "../../../components/messages/MessageBubble";
 import MessageComposer from "../../../components/messages/MessageComposer";
 import AttachmentMenu from "../../../components/messages/AttachmentMenu";
 import MediaDraft from "../../../components/messages/MediaDraft";
+import ImagePreviewScreen from "../../../components/messages/ImagePreviewScreen";
 import SwipeToReply from "../../../components/messages/SwipeToReply";
 import { messagePreview } from "../../../components/messages/ReplyQuote";
 import TypingIndicator from "../../../components/messages/TypingIndicator";
-import { getConversation, getThread } from "../../../lib/gists";
+import useVoiceRecorder from "../../../components/messages/useVoiceRecorder";
+import { getConversation, getThread, messageSenderKey, resolveMessageSender } from "../../../lib/gists";
 import { palette } from "../../../constants/colors";
 
 function now() {
@@ -65,9 +67,23 @@ function getDateLabel(timeStr) {
   return timeStr;
 }
 
+function getPreviousMessageInRun(list, index) {
+  if (index <= 0) return null;
+  const previous = list[index - 1];
+  return previous?.type === "divider" ? null : previous;
+}
+
+function shouldShowSenderHeader({ item, previousMessage, conversation, isGroupChat }) {
+  if (!isGroupChat || item.isMine) return false;
+  const currentKey = messageSenderKey(item, conversation);
+  const previousKey = previousMessage ? messageSenderKey(previousMessage, conversation) : null;
+  return !(currentKey && previousKey && currentKey === previousKey);
+}
+
 export default function GistThreadScreen() {
   const { id } = useLocalSearchParams();
   const conversation = getConversation(id);
+  const isGroupChat = conversation?.isGroup === true;
   const seed = useMemo(() => getThread(id), [id]);
   const [messages, setMessages] = useState(seed);
   const listData = useMemo(() => withDateDividers(messages), [messages]);
@@ -76,7 +92,6 @@ export default function GistThreadScreen() {
   // the space back to the keyboard if the keyboard was there to begin with.
   const [restoreKeyboard, setRestoreKeyboard] = useState(false);
   const [typing, setTyping] = useState(false);
-  const [recording, setRecording] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [mediaDraft, setMediaDraft] = useState(null);
   const [focusRequest, setFocusRequest] = useState(0);
@@ -113,6 +128,9 @@ export default function GistThreadScreen() {
     const isMedia =
       msg.kind === "image" || msg.kind === "photo" || msg.kind === "video";
     const hasCaption = Boolean(String(msg.text ?? msg.caption ?? "").trim());
+    const groupSender = isGroupChat
+      ? { senderId: "you", sender: { name: "You", avatar: null } }
+      : {};
 
     if (isMedia) {
       const feedback = hasCaption
@@ -123,7 +141,7 @@ export default function GistThreadScreen() {
 
     setMessages((current) => [
       ...current,
-      { id: `m-${Date.now()}`, time: now(), status: "sent", isMine: true, kind: "text", ...msg },
+      { id: `m-${Date.now()}`, time: now(), status: "sent", isMine: true, kind: "text", ...groupSender, ...msg },
     ]);
     setAttachOpen(false);
     requestAnimationFrame(() => listRef.current?.scrollToEnd?.({ animated: true }));
@@ -133,7 +151,7 @@ export default function GistThreadScreen() {
     id: message.id,
     senderName: message.isMine
       ? "You"
-      : message.senderName ?? conversation?.senderName ?? conversation?.name ?? "Them",
+      : resolveMessageSender(message, conversation).name ?? conversation?.senderName ?? conversation?.name ?? "Them",
     preview: messagePreview(message),
     isMine: Boolean(message.isMine),
   }), [conversation]);
@@ -145,11 +163,62 @@ export default function GistThreadScreen() {
     if (!mediaDraft) setFocusRequest((value) => value + 1);
   }, [mediaDraft, replySnapshot]);
 
-  const send = (text) => {
+  const send = (text, options = {}) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    push({ kind: "text", text, replyTo: replyingTo ?? undefined });
+    push({
+      kind: "text",
+      text,
+      viewOnce: options.viewOnce === true,
+      replyTo: replyingTo ?? undefined,
+    });
     setReplyingTo(null);
   };
+
+  const markViewOnceViewed = useCallback((messageId) => {
+    setMessages((current) =>
+      current.map((message) => {
+        if (message.id !== messageId) return message;
+        const consumed = { ...message, viewed: true };
+        delete consumed.text;
+        delete consumed.message;
+        delete consumed.caption;
+        delete consumed.uri;
+        delete consumed.url;
+        delete consumed.localUri;
+        delete consumed.waveform;
+        return consumed;
+      }),
+    );
+  }, []);
+
+  const {
+    recording,
+    durationMillis: recordingDurationMillis,
+    start: startVoiceRecording,
+    stop: stopVoiceRecording,
+  } = useVoiceRecorder({
+    onStart: () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      setAttachOpen(false);
+      Keyboard.dismiss();
+    },
+    onRecorded: ({ uri, duration, viewOnce }) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      push({
+        kind: "voice",
+        uri,
+        duration,
+        viewOnce,
+        replyTo: replyingTo ?? undefined,
+      });
+      setReplyingTo(null);
+    },
+    onCanceled: ({ tooShort }) => {
+      if (tooShort) {
+        Alert.alert("Voice note too short", "Hold the microphone a little longer and try again.");
+      }
+    },
+  });
 
   const onTyping = () => {
     setTyping(true);
@@ -157,13 +226,14 @@ export default function GistThreadScreen() {
     typingTimer.current = setTimeout(() => setTyping(false), 1800);
   };
 
-  const applyAssetToDraft = (asset, replace = false) => {
+  const applyAssetToDraft = (asset, replace = false, viewOnce = false) => {
     const kind = asset.type === "video" || asset.mimeType?.startsWith("video/")
       ? "video"
       : "image";
     setMediaDraft((current) => ({
       kind,
       uri: asset.uri,
+      viewOnce: replace ? Boolean(current?.viewOnce ?? viewOnce) : viewOnce,
       width: asset.width || undefined,
       height: asset.height || undefined,
       duration: asset.duration ? Math.max(0, asset.duration / 1000) : undefined,
@@ -176,7 +246,7 @@ export default function GistThreadScreen() {
     setAttachOpen(false);
   };
 
-  const pickImage = async (kind, replace = false) => {
+  const pickImage = async (kind, replace = false, viewOnce = false) => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
@@ -191,13 +261,13 @@ export default function GistThreadScreen() {
         selectionLimit: 1,
       });
       if (result.canceled || !result.assets?.length) return;
-      applyAssetToDraft(result.assets[0], replace);
+      applyAssetToDraft(result.assets[0], replace, viewOnce);
     } catch (error) {
       Alert.alert("Couldn't choose media", String(error?.message ?? error));
     }
   };
 
-  const takePhoto = async (replace = false) => {
+  const takePhoto = async (replace = false, viewOnce = false) => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -211,19 +281,20 @@ export default function GistThreadScreen() {
         videoMaxDuration: 60,
       });
       if (result.canceled || !result.assets?.length) return;
-      applyAssetToDraft(result.assets[0], replace);
+      applyAssetToDraft(result.assets[0], replace, viewOnce);
     } catch (error) {
       Alert.alert("Couldn't open camera", String(error?.message ?? error));
     }
   };
 
-  const sendMedia = ({ caption }) => {
+  const sendMedia = ({ caption, viewOnce }) => {
     if (!mediaDraft?.uri) return;
     const attachment = { ...mediaDraft };
     delete attachment.caption;
     push({
       ...attachment,
       text: caption || undefined,
+      viewOnce: viewOnce === true,
       replyTo: replyingTo ?? undefined,
     });
     setMediaDraft(null);
@@ -232,11 +303,11 @@ export default function GistThreadScreen() {
 
   const replaceDraft = () => {
     if (!mediaDraft) return;
-    if (mediaDraft.kind === "image") takePhoto(true);
-    else pickImage("video", true);
+    if (mediaDraft.kind === "image") takePhoto(true, mediaDraft.viewOnce);
+    else pickImage("video", true, mediaDraft.viewOnce);
   };
 
-  const pickFile = async () => {
+  const pickFile = async (viewOnce = false) => {
     try {
       const res = await DocumentPicker.getDocumentAsync({
         type: ["application/pdf", "application/*", "*/*"],
@@ -250,6 +321,7 @@ export default function GistThreadScreen() {
         fileName: f.name ?? "document.pdf",
         fileSize: f.size,
         mimeType: f.mimeType ?? "application/pdf",
+        viewOnce,
       });
     } catch (e) {
       Alert.alert("Couldn't pick file", String(e?.message ?? e));
@@ -261,15 +333,7 @@ export default function GistThreadScreen() {
     else if (actionId === "video") pickImage("video");
     else if (actionId === "camera") takePhoto();
     else if (actionId === "file") pickFile();
-    else if (actionId === "view-once") push({ kind: "view-once", mediaType: "photo" });
     else setAttachOpen(false);
-  };
-
-  const startVoice = () => setRecording(true);
-  const stopVoice = () => {
-    if (!recording) return;
-    setRecording(false);
-    push({ kind: "voice", uri: null, duration: 7 });
   };
 
   // The attachment panel replaces the keyboard, like a toggle: dismiss the
@@ -373,13 +437,28 @@ export default function GistThreadScreen() {
           keyExtractor={(i) => String(i.id)}
           contentContainerStyle={styles.thread}
           onContentSizeChange={() => listRef.current?.scrollToEnd?.({ animated: false })}
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             if (item.type === "divider") {
               return <DateDivider label={item.label} />;
             }
+            const previousMessage = getPreviousMessageInRun(listData, index);
+            const showSenderHeader = shouldShowSenderHeader({
+              item,
+              previousMessage,
+              conversation,
+              isGroupChat,
+            });
+            const sender = resolveMessageSender(item, conversation);
             return (
               <SwipeToReply message={item} onReply={startReply}>
-                <MessageBubble item={item} onReply={startReply} />
+                <MessageBubble
+                  item={item}
+                  sender={sender}
+                  isGroup={isGroupChat}
+                  showSenderHeader={showSenderHeader}
+                  onReply={startReply}
+                  onViewOnceOpen={() => markViewOnceViewed(item.id)}
+                />
               </SwipeToReply>
             );
           }}
@@ -393,7 +472,19 @@ export default function GistThreadScreen() {
         />
 
         <View onLayout={onComposerLayout}>
-          {mediaDraft ? (
+          {mediaDraft?.kind === "image" ? (
+            <ImagePreviewScreen
+              visible
+              draft={mediaDraft}
+              receiverName={conversation?.name ?? "Recipient"}
+              onChange={(patch) =>
+                setMediaDraft((current) => ({ ...current, ...patch }))
+              }
+              onClose={() => setMediaDraft(null)}
+              onSend={sendMedia}
+              onTyping={onTyping}
+            />
+          ) : mediaDraft ? (
             <MediaDraft
               draft={mediaDraft}
               replyTo={replyingTo}
@@ -413,10 +504,11 @@ export default function GistThreadScreen() {
               restoreKeyboard={restoreKeyboard}
               onAttachment={toggleAttach}
               onInputFocus={() => setAttachOpen(false)}
-              onCamera={takePhoto}
-              onMicPress={startVoice}
-              onMicRelease={stopVoice}
+              onCamera={(options) => takePhoto(false, options?.viewOnce === true)}
+              onMicStart={startVoiceRecording}
+              onMicFinish={stopVoiceRecording}
               recording={recording}
+              recordingDuration={recordingDurationMillis / 1000}
               onTyping={onTyping}
               replyTo={replyingTo}
               onCancelReply={() => setReplyingTo(null)}

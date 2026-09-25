@@ -62,6 +62,7 @@ import {
   SparklesIcon,
   Location01Icon,
   CircleSlashIcon,
+  CopyPlusIcon,
 } from "@hugeicons/core-free-icons";
 
 const icons = {
@@ -128,6 +129,7 @@ const icons = {
   sparkle: SparklesIcon,
 
   attachment: AddCircleIcon,
+  addMultiple: CopyPlusIcon,
   file: File02Icon,
   emoji: SmileIcon,
   location: Location01Icon,

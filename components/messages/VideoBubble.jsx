@@ -69,7 +69,7 @@ export default function VideoBubble({
           style={styles.video}
           contentFit="cover"
           nativeControls={false}
-          allowsFullscreen={false}
+          fullscreenOptions={{ enable: false }}
           allowsPictureInPicture={false}
           surfaceType="textureView"
         />

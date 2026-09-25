@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../ui/Icon";
+import Avatar from "../ui/Avatar";
 import Modal from "../ui/Modal";
 import VoiceBubble from "./VoiceBubble";
 import FileBubble from "./FileBubble";
@@ -18,6 +19,7 @@ import ViewOnceBubble from "./ViewOnceBubble";
 import VideoBubble from "./VideoBubble";
 import ImageBubble from "./ImageBubble";
 import ReplyQuote from "./ReplyQuote";
+import ViewOnceViewer from "./ViewOnceViewer";
 const window = Dimensions.get("window");
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = window;
 
@@ -36,6 +38,9 @@ export default function MessageBubble(props) {
     message,
     item,
     isMine: isMineProp,
+    isGroup = false,
+    sender: senderProp,
+    showSenderHeader = true,
     showAvatar = false,
     time: timeProp,
     status: statusProp,
@@ -52,7 +57,26 @@ export default function MessageBubble(props) {
   const status = data.status ?? statusProp;
   const text = data.text ?? data.caption ?? data.message ?? message;
   const uri = data.uri ?? data.url ?? data.localUri;
+  const sender = senderProp ?? data.sender ?? data.user ?? data.userProfile ?? data.profile ?? data.author ?? (
+    data.senderName || data.senderAvatar
+      ? { name: data.senderName, avatar: data.senderAvatar }
+      : null
+  );
+  const senderName = typeof sender === "string"
+    ? sender
+    : sender?.name ?? sender?.displayName ?? sender?.fullName ?? data.senderName ?? null;
+  const senderAvatar = typeof sender === "object"
+    ? sender?.avatar ?? sender?.avatarUri ?? sender?.photoURL ?? sender?.image ?? data.senderAvatar ?? null
+    : data.senderAvatar ?? null;
+  const showGroupIdentity = isGroup && !isMine && showSenderHeader && Boolean(senderName);
+  const isViewOnce = data.viewOnce === true || ["view-once", "view_once", "viewonce"].includes(kind);
   const [viewed, setViewed] = useState(data.viewed ?? false);
+  const [viewOnceVisible, setViewOnceVisible] = useState(false);
+  const [viewOnceMessage, setViewOnceMessage] = useState(null);
+
+  useEffect(() => {
+    setViewed(data.viewed === true);
+  }, [data.viewed]);
 
   // ---------------------------------------------------------------
   // Reaction + message-action UI (iMessage-style long-press)
@@ -136,15 +160,35 @@ export default function MessageBubble(props) {
 
   const isMedia = kind === "image" || kind === "photo" || kind === "video";
   const hasCaption = !!String(text ?? "").trim();
-  const isBareMedia = isMedia && !!uri && !hasCaption && !data.replyTo;
+  const isBareMedia = isMedia && !isViewOnce && !!uri && !hasCaption && !data.replyTo;
 
   const handleViewOnce = () => {
     if (viewed) return;
     setViewed(true);
+    setViewOnceMessage({ ...data });
+    setViewOnceVisible(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onViewOnceOpen?.(data);
   };
 
+  const closeViewOnce = () => {
+    setViewOnceVisible(false);
+    setViewOnceMessage(null);
+  };
+
   const renderBody = () => {
+    if (isViewOnce) {
+      return (
+        <ViewOnceBubble
+          viewed={viewed}
+          isMine={isMine}
+          message={data}
+          onOpen={handleViewOnce}
+          onLongPress={openFocusOnLongPress}
+        />
+      );
+    }
+
     switch (kind) {
       case "image":
       case "photo":
@@ -201,18 +245,6 @@ export default function MessageBubble(props) {
             downloading={data.downloading ?? false}
             downloadError={data.downloadError ?? false}
             duration={data.duration}
-          />
-        );
-
-      case "view-once":
-      case "view_once":
-      case "viewonce":
-        return (
-          <ViewOnceBubble
-            viewed={viewed}
-            isMine={isMine}
-            mediaType={data.mediaType ?? "photo"}
-            onOpen={handleViewOnce}
           />
         );
 
@@ -286,62 +318,92 @@ export default function MessageBubble(props) {
         !!currentReaction && styles.rowWithReaction,
       ]}
     >
-      {!isMine && showAvatar && <View style={styles.avatarSpace} />}
+      {isGroup && !isMine ? (
+        <View style={styles.groupAvatarSlot}>
+          {showGroupIdentity ? (
+            <Avatar
+              uri={senderAvatar}
+              name={senderName ?? "?"}
+              size={28}
+              style={styles.groupAvatar}
+            />
+          ) : null}
+        </View>
+      ) : !isMine && showAvatar ? (
+        <View style={styles.avatarSpace} />
+      ) : null}
 
-      <Pressable
-        ref={bubbleRef}
-        onLongPress={openFocusOnLongPress}
-        delayLongPress={400}
-        accessibilityRole="button"
-        accessibilityLabel={`Message from ${isMine ? "you" : "them"}: ${text}`}
-        accessibilityHint="Swipe horizontally to reply"
-        style={({ pressed }) => [
-          styles.bubble,
-          isMine ? styles.mineBubble : styles.theirBubble,
-          isBareMedia && styles.bareBubble,
-          pressed && styles.bubblePressed,
-        ]}
-      >
-        {data.replyTo && <ReplyQuote replyTo={data.replyTo} isMine={isMine} />}
-        {renderBody()}
+      <View style={[styles.messageStack, isGroup && !isMine && styles.groupMessageStack]}>
+        {showGroupIdentity ? (
+          <Text style={styles.groupSenderName} numberOfLines={1}>
+            {senderName}
+          </Text>
+        ) : null}
 
-        {!!currentReaction && (
-          <Pressable
-            onPress={openReactionPickerOnly}
-            hitSlop={8}
-            style={styles.reactionBadge}
-            accessibilityRole="button"
-            accessibilityLabel="Change reaction"
-          >
-            <Text style={styles.reactionBadgeText}>{currentReaction}</Text>
-          </Pressable>
-        )}
+        <Pressable
+          ref={bubbleRef}
+          onLongPress={openFocusOnLongPress}
+          delayLongPress={400}
+          accessibilityRole="button"
+          accessibilityLabel={`Message from ${isMine ? "you" : senderName ?? "sender"}${isViewOnce ? ": view-once message" : `: ${text ?? ""}`}`}
+          accessibilityHint={isViewOnce ? "Tap the message to open it once" : "Swipe horizontally to reply"}
+          style={({ pressed }) => [
+            styles.bubble,
+            isMine ? styles.mineBubble : styles.theirBubble,
+            isGroup && !isMine && styles.groupBubble,
+            isBareMedia && styles.bareBubble,
+            pressed && styles.bubblePressed,
+          ]}
+        >
+          {data.replyTo && <ReplyQuote replyTo={data.replyTo} isMine={isMine} />}
+          {renderBody()}
 
-         {(!!time || (isMine && !!status)) && kind !== "voice" && kind !== "audio" &&
-           (isBareMedia ? (
-             <View style={styles.mediaMeta} pointerEvents="none">
-               <Text style={styles.mediaTime}>{time}</Text>
-               {isMine && status && (
-                 <Icon name="check" size={12} color="#FFFFFF" />
-               )}
-             </View>
-           ) : (
-             <View style={styles.meta}>
-               <Text
-                 style={[
-                   styles.time,
-                   isMine ? styles.mineTime : styles.theirTime,
-                 ]}
-               >
-                 {time}
-               </Text>
-               {isMine && status && (
-                 <Icon name="check" size={13} color="#777777" />
-               )}
-               {isStarred && <Icon name="star" size={13} color="#F5A524" />}
-             </View>
-           ))}
-      </Pressable>
+          {!!currentReaction && (
+            <Pressable
+              onPress={openReactionPickerOnly}
+              hitSlop={8}
+              style={styles.reactionBadge}
+              accessibilityRole="button"
+              accessibilityLabel="Change reaction"
+            >
+              <Text style={styles.reactionBadgeText}>{currentReaction}</Text>
+            </Pressable>
+          )}
+
+           {(!!time || (isMine && !!status)) && kind !== "voice" && kind !== "audio" &&
+             (isBareMedia ? (
+               <View style={styles.mediaMeta} pointerEvents="none">
+                 <Text style={styles.mediaTime}>{time}</Text>
+                 {isMine && status && (
+                   <Icon name="check" size={12} color="#FFFFFF" />
+                 )}
+               </View>
+             ) : (
+               <View style={styles.meta}>
+                 <Text
+                   style={[
+                     styles.time,
+                     isMine ? styles.mineTime : styles.theirTime,
+                   ]}
+                 >
+                   {time}
+                 </Text>
+                 {isMine && status && (
+                   <Icon name="check" size={13} color="#777777" />
+                 )}
+                 {isStarred && <Icon name="star" size={13} color="#F5A524" />}
+               </View>
+             ))}
+        </Pressable>
+      </View>
+
+      {isViewOnce && viewOnceVisible && (
+        <ViewOnceViewer
+          visible={viewOnceVisible}
+          message={viewOnceMessage}
+          onClose={closeViewOnce}
+        />
+      )}
 
       {/* Floating long-press preview: blur + reaction rail + real bubble + menu */}
       {focusedMessage && anchor && (
@@ -500,6 +562,25 @@ const styles = StyleSheet.create({
   // Extra bottom space so a hanging reaction badge never overlaps the next bubble
   rowWithReaction: { marginBottom: 18 },
   avatarSpace: { width: 28, marginRight: 5 },
+  messageStack: { flexShrink: 1 },
+  groupAvatarSlot: {
+    width: 36,
+    marginRight: 6,
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingTop: 1,
+  },
+  groupMessageStack: { flex: 1, minWidth: 0 },
+  groupAvatar: { borderWidth: 1, borderColor: "#FFFFFF" },
+  groupSenderName: {
+    marginBottom: 3,
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: "600",
+    color: "#555555",
+    textAlign: "left",
+  },
+  groupBubble: { maxWidth: "100%", alignSelf: "flex-start" },
 
   bubble: {
     position: "relative",

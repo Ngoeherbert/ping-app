@@ -46,7 +46,7 @@ function DraftVideo({ uri, stickers, onRemoveSticker }) {
         style={StyleSheet.absoluteFill}
         contentFit="cover"
         nativeControls={false}
-        allowsFullscreen={false}
+        fullscreenOptions={{ enable: false }}
         allowsPictureInPicture={false}
         surfaceType="textureView"
       />
@@ -93,6 +93,7 @@ export default function MediaDraft({
   const isVideo = draft.kind === "video";
   const caption = draft.caption ?? "";
   const stickers = Array.isArray(draft.stickers) ? draft.stickers : [];
+  const viewOnce = draft.viewOnce === true;
   const canSend = !editing && !!draft.uri;
 
   const updateCaption = (value) => {
@@ -240,6 +241,18 @@ export default function MediaDraft({
           {!!draft.duration && (
             <Text style={styles.duration}>{formatDuration(draft.duration)}</Text>
           )}
+          <Pressable
+            onPress={() => onChange({ viewOnce: !viewOnce })}
+            style={[styles.draftOption, viewOnce && styles.draftOptionActive]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: viewOnce }}
+            accessibilityLabel="Send media as view once"
+          >
+            <Icon name="viewOnce" size={16} color={viewOnce ? "#FFFFFF" : "#666666"} />
+            <Text style={[styles.draftOptionText, viewOnce && styles.draftOptionTextActive]}>
+              {viewOnce ? "View once" : "Normal"}
+            </Text>
+          </Pressable>
         </View>
         <Pressable
           onPress={onClose}
@@ -250,7 +263,7 @@ export default function MediaDraft({
           <Icon name="close" size={20} color="#555555" />
         </Pressable>
         <Pressable
-          onPress={() => onSend({ caption: caption.trim() })}
+          onPress={() => onSend({ caption: caption.trim(), viewOnce })}
           disabled={!canSend}
           style={[styles.sendButton, !canSend && styles.sendDisabled]}
           accessibilityRole="button"
@@ -392,6 +405,20 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
   },
   duration: { marginTop: 4, marginLeft: 12, fontSize: 11, color: "#777777" },
+  draftOption: {
+    alignSelf: "flex-start",
+    minHeight: 28,
+    marginTop: 5,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#F0F0F2",
+  },
+  draftOptionActive: { backgroundColor: "#111111" },
+  draftOptionText: { fontSize: 10, fontWeight: "700", color: "#666666" },
+  draftOptionTextActive: { color: "#FFFFFF" },
   closeButton: {
     width: 34,
     height: 42,
