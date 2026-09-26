@@ -33,7 +33,6 @@ export default function MessageComposer({
 }) {
   const [text, setText] = useState("");
   const [viewOnce, setViewOnce] = useState(false);
-  const [isInputFocused, setIsInputFocused] = useState(false);
   const inputRef = useRef(null);
   const inputFocused = useRef(false);
   const wasAttachOpen = useRef(false);
@@ -56,6 +55,7 @@ export default function MessageComposer({
 
   const handleChange = (v) => {
     setText(v);
+    if (!v.trim()) setViewOnce(false);
     onTyping?.(v);
   };
 
@@ -158,26 +158,22 @@ export default function MessageComposer({
           </Pressable>
         </View>
       )}
-      {(!recording && (isInputFocused || hasText)) && (
-        <View style={[styles.viewOnceBar, viewOnce && styles.viewOnceBarActive]}>
+      {!recording && hasText ? (
+        <Pressable
+          onPress={() => setViewOnce((value) => !value)}
+          style={[styles.viewOnceBar, viewOnce && styles.viewOnceBarActive]}
+          accessibilityRole="button"
+          accessibilityLabel={viewOnce ? "Disable view once" : "Enable view once"}
+          accessibilityHint="Only the recipient can open this message once"
+        >
           <View style={styles.viewOnceCopy}>
             <Icon name="viewOnce" size={17} color={viewOnce ? "#FFFFFF" : "#555555"} />
             <Text style={[styles.viewOnceLabel, viewOnce && styles.viewOnceLabelActive]}>
               View once
             </Text>
           </View>
-          <Pressable
-            onPress={() => setViewOnce((value) => !value)}
-            style={[styles.viewOnceSwitch, viewOnce && styles.viewOnceSwitchActive]}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: viewOnce }}
-            accessibilityLabel="Send as view once"
-            accessibilityHint="The next text message can only be opened once"
-          >
-            <View style={[styles.switchThumb, viewOnce && styles.switchThumbActive]} />
-          </Pressable>
-        </View>
-      )}
+        </Pressable>
+      ) : null}
       <View style={styles.container}>
         <Pressable
           style={styles.iconButton}
@@ -207,14 +203,12 @@ export default function MessageComposer({
               onChangeText={handleChange}
               onFocus={() => {
                 inputFocused.current = true;
-                setIsInputFocused(true);
                 // Tapping the field while the panel is open swaps back to
                 // the keyboard.
                 onInputFocus?.();
               }}
               onBlur={() => {
                 inputFocused.current = false;
-                setIsInputFocused(false);
               }}
               placeholder={viewOnce ? "View-once message…" : placeholder}
               placeholderTextColor="#888888"
@@ -365,7 +359,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     backgroundColor: "#F7F7F8",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#E5E5E5",
@@ -374,22 +368,6 @@ const styles = StyleSheet.create({
   viewOnceCopy: { flexDirection: "row", alignItems: "center", gap: 7 },
   viewOnceLabel: { fontSize: 12, fontWeight: "600", color: "#555555" },
   viewOnceLabelActive: { color: "#FFFFFF" },
-  viewOnceSwitch: {
-    width: 42,
-    height: 26,
-    padding: 3,
-    borderRadius: 13,
-    justifyContent: "center",
-    backgroundColor: "#D6D6D6",
-  },
-  viewOnceSwitchActive: { backgroundColor: "#FFFFFF" },
-  switchThumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-  },
-  switchThumbActive: { alignSelf: "flex-end", backgroundColor: "#111111" },
 
   recordingDuration: { fontSize: 13, fontWeight: "700", color: "#E5484D" },
   recordingHint: { marginLeft: "auto", fontSize: 11, color: "#A33A3E" },

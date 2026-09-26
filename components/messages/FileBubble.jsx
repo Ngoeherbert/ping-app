@@ -159,7 +159,7 @@ export default function FileBubble({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 10, minWidth: 200 },
+  row: { flexDirection: "row", alignItems: "center", gap: 10, minWidth: 0, maxWidth: "100%", flexShrink: 1 },
   tile: {
     width: 46,
     height: 46,

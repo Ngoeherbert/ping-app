@@ -244,9 +244,8 @@ export default function MediaDraft({
           <Pressable
             onPress={() => onChange({ viewOnce: !viewOnce })}
             style={[styles.draftOption, viewOnce && styles.draftOptionActive]}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: viewOnce }}
-            accessibilityLabel="Send media as view once"
+            accessibilityRole="button"
+            accessibilityLabel={viewOnce ? "Disable view once" : "Enable view once"}
           >
             <Icon name="viewOnce" size={16} color={viewOnce ? "#FFFFFF" : "#666666"} />
             <Text style={[styles.draftOptionText, viewOnce && styles.draftOptionTextActive]}>

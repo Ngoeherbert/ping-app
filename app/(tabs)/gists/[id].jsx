@@ -29,8 +29,31 @@ import useVoiceRecorder from "../../../components/messages/useVoiceRecorder";
 import { getConversation, getThread, messageSenderKey, resolveMessageSender } from "../../../lib/gists";
 import { palette } from "../../../constants/colors";
 
+const MAX_MEDIA_ITEMS = 10;
+
 function now() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function mediaItemFromAsset(asset) {
+  const type = asset?.type ?? asset?.kind ?? "";
+  const kind = type === "video" || type === "pairedVideo"
+    || String(type).startsWith("video")
+    || asset?.mimeType?.startsWith("video/")
+    ? "video"
+    : "image";
+
+  return {
+    kind,
+    uri: asset?.uri,
+    assetId: asset?.assetId || undefined,
+    width: asset?.width || undefined,
+    height: asset?.height || undefined,
+    duration: asset?.duration ? Math.max(0, asset.duration / 1000) : undefined,
+    fileName: asset?.fileName || undefined,
+    fileSize: asset?.fileSize || undefined,
+    mimeType: asset?.mimeType || undefined,
+  };
 }
 
 function DateDivider({ label }) {
@@ -97,6 +120,7 @@ export default function GistThreadScreen() {
   const [focusRequest, setFocusRequest] = useState(0);
   const typingTimer = useRef(null);
   const listRef = useRef(null);
+  const messageSequenceRef = useRef(0);
   // Layout measurements used to make the attachment panel take over the exact
   // band the keyboard occupied.
   const kavHeightRef = useRef(0);
@@ -139,9 +163,18 @@ export default function GistThreadScreen() {
       feedback.catch(() => {});
     }
 
+    const messageId = `m-${Date.now()}-${(messageSequenceRef.current += 1)}`;
     setMessages((current) => [
       ...current,
-      { id: `m-${Date.now()}`, time: now(), status: "sent", isMine: true, kind: "text", ...groupSender, ...msg },
+      {
+        id: messageId,
+        time: now(),
+        status: "sent",
+        isMine: true,
+        kind: "text",
+        ...groupSender,
+        ...msg,
+      },
     ]);
     setAttachOpen(false);
     requestAnimationFrame(() => listRef.current?.scrollToEnd?.({ animated: true }));
@@ -227,19 +260,11 @@ export default function GistThreadScreen() {
   };
 
   const applyAssetToDraft = (asset, replace = false, viewOnce = false) => {
-    const kind = asset.type === "video" || asset.mimeType?.startsWith("video/")
-      ? "video"
-      : "image";
+    const media = mediaItemFromAsset(asset);
     setMediaDraft((current) => ({
-      kind,
-      uri: asset.uri,
+      ...media,
+      assets: [media],
       viewOnce: replace ? Boolean(current?.viewOnce ?? viewOnce) : viewOnce,
-      width: asset.width || undefined,
-      height: asset.height || undefined,
-      duration: asset.duration ? Math.max(0, asset.duration / 1000) : undefined,
-      fileName: asset.fileName || undefined,
-      fileSize: asset.fileSize || undefined,
-      mimeType: asset.mimeType || undefined,
       caption: replace ? current?.caption ?? "" : "",
       stickers: replace ? current?.stickers ?? [] : [],
     }));
@@ -267,6 +292,62 @@ export default function GistThreadScreen() {
     }
   };
 
+  const pickAdditionalMedia = async () => {
+    const currentCount = Array.isArray(mediaDraft?.assets) && mediaDraft.assets.length
+      ? mediaDraft.assets.length
+      : mediaDraft?.uri
+        ? 1
+        : 0;
+    if (currentCount >= MAX_MEDIA_ITEMS) {
+      Alert.alert("Media limit reached", `You can attach up to ${MAX_MEDIA_ITEMS} items.`);
+      return;
+    }
+
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Permission needed", "Allow photo library access to choose media.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images", "videos"],
+        allowsEditing: false,
+        quality: 0.85,
+        allowsMultipleSelection: true,
+        selectionLimit: MAX_MEDIA_ITEMS - currentCount,
+      });
+      if (result.canceled || !result.assets?.length) return;
+
+      const additions = result.assets.map(mediaItemFromAsset).filter((item) => item.uri);
+      setMediaDraft((current) => {
+        if (!current) return current;
+        const existing = Array.isArray(current.assets) && current.assets.length
+          ? current.assets
+          : [mediaItemFromAsset(current)];
+        const seen = new Set(existing.map((item) => item.uri));
+        const next = [...existing];
+        for (const addition of additions) {
+          if (seen.has(addition.uri)) continue;
+          seen.add(addition.uri);
+          next.push(addition);
+          if (next.length >= MAX_MEDIA_ITEMS) break;
+        }
+        const [primary] = next;
+        return {
+          ...current,
+          ...primary,
+          assets: next,
+          caption: current.caption ?? "",
+          viewOnce: current.viewOnce === true,
+          stickers: Array.isArray(current.stickers) ? current.stickers : [],
+        };
+      });
+    } catch (error) {
+      Alert.alert("Couldn't add media", String(error?.message ?? error));
+    }
+  };
+
+
   const takePhoto = async (replace = false, viewOnce = false) => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -288,14 +369,22 @@ export default function GistThreadScreen() {
   };
 
   const sendMedia = ({ caption, viewOnce }) => {
-    if (!mediaDraft?.uri) return;
-    const attachment = { ...mediaDraft };
-    delete attachment.caption;
-    push({
-      ...attachment,
-      text: caption || undefined,
-      viewOnce: viewOnce === true,
-      replyTo: replyingTo ?? undefined,
+    const mediaItems = Array.isArray(mediaDraft?.assets) && mediaDraft.assets.length
+      ? mediaDraft.assets
+      : mediaDraft?.uri
+        ? [mediaDraft]
+        : [];
+    if (!mediaItems.length) return;
+
+    const trimmedCaption = String(caption ?? "").trim();
+    mediaItems.forEach((item, index) => {
+      const attachment = mediaItemFromAsset(item);
+      push({
+        ...attachment,
+        text: index === 0 && trimmedCaption ? trimmedCaption : undefined,
+        viewOnce: viewOnce === true,
+        replyTo: replyingTo ?? undefined,
+      });
     });
     setMediaDraft(null);
     setReplyingTo(null);
@@ -480,6 +569,7 @@ export default function GistThreadScreen() {
               onChange={(patch) =>
                 setMediaDraft((current) => ({ ...current, ...patch }))
               }
+              onAdd={pickAdditionalMedia}
               onClose={() => setMediaDraft(null)}
               onSend={sendMedia}
               onTyping={onTyping}

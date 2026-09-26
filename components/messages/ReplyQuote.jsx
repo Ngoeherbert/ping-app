@@ -71,8 +71,9 @@ export default function ReplyQuote({ replyTo, isMine = false }) {
 
 const styles = StyleSheet.create({
   container: {
-    minWidth: 132,
-    maxWidth: 230,
+    minWidth: 0,
+    maxWidth: "100%",
+    alignSelf: "stretch",
     marginBottom: 7,
     paddingVertical: 6,
     paddingHorizontal: 8,

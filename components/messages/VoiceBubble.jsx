@@ -109,7 +109,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    minWidth: 190,
+    minWidth: 0,
+    maxWidth: "100%",
+    flexShrink: 1,
   },
   play: {
     width: 34,

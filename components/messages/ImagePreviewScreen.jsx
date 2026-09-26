@@ -1,6 +1,7 @@
-import React, { useRef } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -10,6 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../ui/Icon";
@@ -19,14 +21,35 @@ export default function ImagePreviewScreen({
   draft,
   receiverName = "Recipient",
   onChange,
+  onAdd,
   onClose,
   onSend,
   onTyping,
 }) {
-  const inputRef = useRef(null);
+  const mediaItems = Array.isArray(draft?.assets) && draft.assets.length
+    ? draft.assets
+    : draft?.uri
+      ? [draft]
+      : [];
+  const primaryMedia = mediaItems[0] ?? null;
+  const primaryKind = primaryMedia?.kind === "video" || primaryMedia?.type === "video"
+    || primaryMedia?.mimeType?.startsWith("video/")
+    ? "video"
+    : "image";
+  const videoSource = useMemo(
+    () => primaryKind === "video" && primaryMedia?.uri
+      ? { uri: primaryMedia.uri, contentType: "progressive" }
+      : null,
+    [primaryKind, primaryMedia?.uri],
+  );
+  const player = useVideoPlayer(videoSource);
   const caption = String(draft?.caption ?? "");
   const viewOnce = draft?.viewOnce === true;
-  const canSend = Boolean(draft?.uri);
+  const canSend = mediaItems.length > 0;
+
+  useEffect(() => {
+    if (visible) Keyboard.dismiss();
+  }, [visible]);
 
   const updateCaption = (value) => {
     onChange?.({ caption: value });
@@ -38,7 +61,13 @@ export default function ImagePreviewScreen({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
       <SafeAreaView style={styles.screen} edges={["top", "bottom", "left", "right"]}>
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close image preview">
@@ -49,12 +78,26 @@ export default function ImagePreviewScreen({
         </View>
 
         <View style={styles.previewArea}>
-          {draft?.uri ? (
-            <Image source={{ uri: draft.uri }} style={styles.previewImage} resizeMode="contain" />
+          {primaryMedia?.uri && primaryKind === "video" ? (
+            <VideoView
+              player={player}
+              style={styles.previewImage}
+              contentFit="contain"
+              nativeControls
+              fullscreenOptions={{ enable: false }}
+              surfaceType="textureView"
+            />
+          ) : primaryMedia?.uri ? (
+            <Image source={{ uri: primaryMedia.uri }} style={styles.previewImage} resizeMode="contain" />
           ) : (
             <View style={styles.unavailable}>
               <Icon name="image" size={42} color="#777777" />
               <Text style={styles.unavailableText}>Image unavailable</Text>
+            </View>
+          )}
+          {mediaItems.length > 1 && (
+            <View style={styles.countBadge} pointerEvents="none">
+              <Text style={styles.countText}>{mediaItems.length} selected</Text>
             </View>
           )}
         </View>
@@ -66,15 +109,14 @@ export default function ImagePreviewScreen({
         >
           <View style={styles.inputShell}>
             <Pressable
-              onPress={() => inputRef.current?.focus()}
+              onPress={onAdd}
               style={styles.addButton}
               accessibilityRole="button"
-              accessibilityLabel="Add to message"
+              accessibilityLabel="Add more images or videos"
             >
               <Icon name="plus" size={20} color="#555555" />
             </Pressable>
             <TextInput
-              ref={inputRef}
               value={caption}
               onChangeText={updateCaption}
               placeholder="Add a caption…"
@@ -82,15 +124,13 @@ export default function ImagePreviewScreen({
               style={styles.captionInput}
               multiline
               maxLength={4000}
-              autoFocus
               accessibilityLabel="Image caption"
             />
             <Pressable
               onPress={() => onChange?.({ viewOnce: !viewOnce })}
               style={[styles.viewOnceButton, viewOnce && styles.viewOnceButtonActive]}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: viewOnce }}
-              accessibilityLabel="Send image as view once"
+              accessibilityRole="button"
+              accessibilityLabel={viewOnce ? "Disable view once" : "Enable view once"}
             >
               <Icon name="viewOnce" size={19} color={viewOnce ? "#FFFFFF" : "#666666"} />
             </Pressable>
@@ -131,8 +171,18 @@ const styles = StyleSheet.create({
   closeButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center" },
   headerTitle: { fontSize: 16, fontWeight: "700", color: "#111111" },
   headerSpacer: { width: 42 },
-  previewArea: { flex: 1, minHeight: 220, backgroundColor: "#111111" },
+  previewArea: { flex: 1, minHeight: 220, backgroundColor: "#111111", position: "relative" },
   previewImage: { flex: 1, width: "100%", height: "100%" },
+  countBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.62)",
+  },
+  countText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
   unavailable: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   unavailableText: { color: "#BBBBBB", fontSize: 14 },
   bottomPanel: { paddingHorizontal: 12, paddingTop: 10, backgroundColor: "#FFFFFF" },
