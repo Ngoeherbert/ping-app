@@ -86,7 +86,9 @@ const styles = StyleSheet.create({
   bar: { width: 3, borderRadius: 2, marginRight: 8 },
   mineBar: { backgroundColor: "#69D98B" },
   theirBar: { backgroundColor: "#5B57FF" },
-  copy: { flex: 1, minWidth: 0 },
+  // Same content-sized-bubble caveat as FileBubble: `flex: 1` would collapse
+  // the quoted text to zero width when the quote is the widest part of the bubble.
+  copy: { flexShrink: 1, minWidth: 0 },
   sender: { fontSize: 12, fontWeight: "700" },
   mineSender: { color: "#D8FFE4" },
   theirSender: { color: "#3730A3" },

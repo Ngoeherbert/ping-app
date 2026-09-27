@@ -46,19 +46,16 @@ export default function ViewOnceBubble({
       />
       <View style={styles.copy}>
         <Text style={[styles.label, isMine ? styles.labelMine : styles.labelTheirs]}>
-          View-once {label.toLowerCase()}
-        </Text>
-        <Text style={[styles.hint, isMine ? styles.hintMine : styles.hintTheirs]}>
-          Tap to open
+            {label.toLowerCase()}
         </Text>
       </View>
-    </Pressable>
+    </Pressable> 
   );
 }
 
 const styles = StyleSheet.create({
   row: {
-    minWidth: 150,
+    minWidth: 100,
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
@@ -68,9 +65,6 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: "700" },
   labelMine: { color: "#FFFFFF" },
   labelTheirs: { color: "#111111" },
-  hint: { marginTop: 2, fontSize: 10 },
-  hintMine: { color: "#CCCCCC" },
-  hintTheirs: { color: "#777777" },
   opened: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 2 },
   openedText: { fontSize: 13, fontStyle: "italic" },
   openedMine: { color: "#AAAAAA" },

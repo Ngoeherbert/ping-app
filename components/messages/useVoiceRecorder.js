@@ -8,7 +8,9 @@ import {
 } from "expo-audio";
 import { File } from "expo-file-system";
 
-const MIN_RECORDING_MS = 700;
+// A tap that slips past the long-press threshold is usually an accident, but
+// this is low enough that a deliberately short "ok" still makes it through.
+const MIN_RECORDING_MS = 500;
 
 function removeTemporaryRecording(uri) {
   if (!uri || Platform.OS === "web") return;
@@ -154,10 +156,13 @@ export default function useVoiceRecorder({
   );
 
   const stop = useCallback(
-    async ({ canceled = false } = {}) => {
+    async ({ canceled = false, viewOnce } = {}) => {
       if (!isMountedRef.current) return false;
       if (startingRef.current && !activeRef.current) {
-        pendingFinishRef.current = { canceled };
+        // Released before the recorder finished opening. Park the stop so it
+        // fires the moment recording actually begins — carrying viewOnce with
+        // it, or a view-once take would go out as an ordinary one.
+        pendingFinishRef.current = { canceled, viewOnce };
         setRecording(false);
         stopDurationTimer();
         return false;
@@ -199,6 +204,10 @@ export default function useVoiceRecorder({
         return false;
       }
 
+      // The view-once toggle is reachable while a take is running, so a flag
+      // passed in now wins over the one captured when recording opened.
+      if (typeof viewOnce === "boolean") viewOnceRef.current = viewOnce;
+
       onRecordedRef.current?.({
         uri,
         duration: durationMillis / 1000,
@@ -212,11 +221,19 @@ export default function useVoiceRecorder({
 
   stopRef.current = stop;
 
+  // A take the user chose not to send. The recorder already cleans up on
+  // cancellation, but a finished take parked in the composer has to be removed
+  // from the cache when the user throws it away.
+  const discard = useCallback((uri) => {
+    removeTemporaryRecording(uri);
+  }, []);
+
   return {
     recording,
     durationMillis: recording ? recordingDuration : 0,
     metering: 0,
     start,
     stop,
+    discard,
   };
 }

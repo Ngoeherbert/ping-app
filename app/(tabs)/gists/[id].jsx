@@ -19,7 +19,7 @@ import Avatar from "../../../components/ui/Avatar";
 import Icon from "../../../components/ui/Icon";
 import MessageBubble from "../../../components/messages/MessageBubble";
 import MessageComposer from "../../../components/messages/MessageComposer";
-import AttachmentMenu from "../../../components/messages/AttachmentMenu";
+import ComposerPanel, { PANEL_IDS } from "../../../components/messages/ComposerPanel";
 import MediaDraft from "../../../components/messages/MediaDraft";
 import ImagePreviewScreen from "../../../components/messages/ImagePreviewScreen";
 import SwipeToReply from "../../../components/messages/SwipeToReply";
@@ -110,16 +110,23 @@ export default function GistThreadScreen() {
   const seed = useMemo(() => getThread(id), [id]);
   const [messages, setMessages] = useState(seed);
   const listData = useMemo(() => withDateDividers(messages), [messages]);
-  const [attachOpen, setAttachOpen] = useState(false);
+  // Which composer panel is showing, or null when the keyboard has the space.
+  // One modal serves attachments, emoji and games — the entry point picks the
+  // content instead of a tab bar. See ComposerPanel.
+  const [activePanel, setActivePanel] = useState(null);
+  const panelOpen = activePanel !== null;
   // Whether the keyboard was up when the panel opened — the panel only hands
   // the space back to the keyboard if the keyboard was there to begin with.
   const [restoreKeyboard, setRestoreKeyboard] = useState(false);
   const [typing, setTyping] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [mediaDraft, setMediaDraft] = useState(null);
+  // A recorded take nobody has sent yet — it waits in the composer's preview bar.
+  const [voiceDraft, setVoiceDraft] = useState(null);
   const [focusRequest, setFocusRequest] = useState(0);
   const typingTimer = useRef(null);
   const listRef = useRef(null);
+  const composerRef = useRef(null);
   const messageSequenceRef = useRef(0);
   // Layout measurements used to make the attachment panel take over the exact
   // band the keyboard occupied.
@@ -147,6 +154,8 @@ export default function GistThreadScreen() {
     });
     return () => sub.remove();
   }, []);
+
+  const closePanel = useCallback(() => setActivePanel(null), []);
 
   const push = (msg) => {
     const isMedia =
@@ -176,7 +185,7 @@ export default function GistThreadScreen() {
         ...msg,
       },
     ]);
-    setAttachOpen(false);
+    closePanel();
     requestAnimationFrame(() => listRef.current?.scrollToEnd?.({ animated: true }));
   };
 
@@ -191,10 +200,10 @@ export default function GistThreadScreen() {
 
   const startReply = useCallback((message) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setAttachOpen(false);
+    closePanel();
     setReplyingTo(replySnapshot(message));
     if (!mediaDraft) setFocusRequest((value) => value + 1);
-  }, [mediaDraft, replySnapshot]);
+  }, [mediaDraft, replySnapshot, closePanel]);
 
   const send = (text, options = {}) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -229,29 +238,53 @@ export default function GistThreadScreen() {
     durationMillis: recordingDurationMillis,
     start: startVoiceRecording,
     stop: stopVoiceRecording,
+    discard: discardRecording,
   } = useVoiceRecorder({
     onStart: () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      setAttachOpen(false);
+      closePanel();
       Keyboard.dismiss();
     },
+    // Releasing the mic only stops the take. It parks in the composer so the
+    // user can play it back, then send or throw it away on purpose.
     onRecorded: ({ uri, duration, viewOnce }) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      push({
-        kind: "voice",
-        uri,
-        duration,
-        viewOnce,
-        replyTo: replyingTo ?? undefined,
-      });
-      setReplyingTo(null);
+      setVoiceDraft({ uri, duration, viewOnce });
     },
-    onCanceled: ({ tooShort }) => {
-      if (tooShort) {
-        Alert.alert("Voice note too short", "Hold the microphone a little longer and try again.");
-      }
+    // Releasing under the minimum just drops the take: nothing is sent, and an
+    // alert here would only nag someone who let go a moment early.
+    onCanceled: () => {
+      setVoiceDraft(null);
     },
   });
+
+  const sendVoiceDraft = () => {
+    const draft = voiceDraft;
+    if (!draft) return;
+    setVoiceDraft(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    push({
+      kind: "voice",
+      uri: draft.uri,
+      duration: draft.duration,
+      viewOnce: draft.viewOnce,
+      replyTo: replyingTo ?? undefined,
+    });
+    setReplyingTo(null);
+  };
+
+  const discardVoiceDraft = () => {
+    const draft = voiceDraft;
+    if (!draft) return;
+    setVoiceDraft(null);
+    discardRecording(draft.uri);
+  };
+
+  // The view-once button stays on screen for as long as a take is pending, so it
+  // has to be able to re-arm the note before it goes out.
+  const setVoiceDraftViewOnce = (next) => {
+    setVoiceDraft((current) => (current ? { ...current, viewOnce: next } : current));
+  };
 
   const onTyping = () => {
     setTyping(true);
@@ -268,7 +301,7 @@ export default function GistThreadScreen() {
       caption: replace ? current?.caption ?? "" : "",
       stickers: replace ? current?.stickers ?? [] : [],
     }));
-    setAttachOpen(false);
+    closePanel();
   };
 
   const pickImage = async (kind, replace = false, viewOnce = false) => {
@@ -422,15 +455,35 @@ export default function GistThreadScreen() {
     else if (actionId === "video") pickImage("video");
     else if (actionId === "camera") takePhoto();
     else if (actionId === "file") pickFile();
-    else setAttachOpen(false);
+    else closePanel();
   };
 
-  // The attachment panel replaces the keyboard, like a toggle: dismiss the
+  // Emoji picked in the panel go into the composer's input at the caret, so the
+  // panel can stay open (focusing the input would summon the keyboard and
+  // collapse the panel the emoji came from).
+  const insertEmoji = (char) => composerRef.current?.insertEmoji(char);
+
+  // The panel hands over a bare game, or one carrying the picks the popover
+  // collected: a party size above two and/or a variant. Both ride along as a
+  // short suffix on the invite.
+  const startGame = (game) => {
+    if (!game) return;
+    closePanel();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const picks = [
+      game.players > 2 ? `${game.players} players` : null,
+      game.mode || null,
+    ].filter(Boolean).join(" · ");
+    send(picks ? `${game.invite} (${picks})` : game.invite);
+  };
+
+  // The composer panel replaces the keyboard, like a toggle: dismiss the
   // keyboard and size the panel to the exact band it just occupied, so the
-  // composer and thread stay put.
-  const toggleAttach = () => {
-    if (attachOpen) {
-      setAttachOpen(false);
+  // composer and thread stay put. Re-tapping the button that owns the panel
+  // that is already up closes it and hands the space back to the keyboard.
+  const openPanel = (panelId) => {
+    if (activePanel === panelId) {
+      closePanel();
       return;
     }
 
@@ -441,8 +494,16 @@ export default function GistThreadScreen() {
     if (lastBandRef.current > 0) setPanelHeight(lastBandRef.current);
 
     Keyboard.dismiss();
-    setAttachOpen(true);
+    setActivePanel(panelId);
   };
+
+  // The paperclip owns the modal as a whole, so it closes whatever is showing.
+  const togglePanel = () => {
+    if (panelOpen) closePanel();
+    else openPanel(PANEL_IDS.attachments);
+  };
+
+  const toggleEmojiPanel = () => openPanel(PANEL_IDS.emojis);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
@@ -589,16 +650,23 @@ export default function GistThreadScreen() {
             />
           ) : (
             <MessageComposer
+              ref={composerRef}
               onSend={send}
-              attachOpen={attachOpen}
+              panelOpen={panelOpen}
+              panel={activePanel}
               restoreKeyboard={restoreKeyboard}
-              onAttachment={toggleAttach}
-              onInputFocus={() => setAttachOpen(false)}
+              onPanelToggle={togglePanel}
+              onEmojiPress={toggleEmojiPanel}
+              onInputFocus={closePanel}
               onCamera={(options) => takePhoto(false, options?.viewOnce === true)}
               onMicStart={startVoiceRecording}
               onMicFinish={stopVoiceRecording}
               recording={recording}
               recordingDuration={recordingDurationMillis / 1000}
+              voiceDraft={voiceDraft}
+              onVoiceDraftSend={sendVoiceDraft}
+              onVoiceDraftDiscard={discardVoiceDraft}
+              onVoiceDraftViewOnceChange={setVoiceDraftViewOnce}
               onTyping={onTyping}
               replyTo={replyingTo}
               onCancelReply={() => setReplyingTo(null)}
@@ -608,14 +676,20 @@ export default function GistThreadScreen() {
           )}
         </View>
 
-        {/* AttachmentMenu is the LAST child so it grows from the bottom of the
+        {/* ComposerPanel is the LAST child so it grows from the bottom of the
             column into the exact band the keyboard just freed. That lets the
             keyboard-dismiss and the panel-grow animations cancel out for the
-            composer — it stays put while the panel takes the keyboard's place. */}
-        <AttachmentMenu
-          visible={attachOpen && !mediaDraft}
+            composer — it stays put while the panel takes the keyboard's place.
+            The same modal hosts attachments, emoji and games, so moving between
+            them swaps content in place instead of collapsing the band. */}
+        <ComposerPanel
+          visible={panelOpen && !mediaDraft}
+          panel={activePanel}
+          onPanelChange={setActivePanel}
           height={panelHeight}
           onSelect={onAttach}
+          onEmoji={insertEmoji}
+          onGame={startGame}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>

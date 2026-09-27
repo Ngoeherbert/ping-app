@@ -553,7 +553,7 @@ export default function MessageBubble(props) {
 const styles = StyleSheet.create({
   row: {
     width: "100%",
-    minWidth: 0,
+    minWidth: "60%",
     paddingHorizontal: 14,
     marginBottom: 10,
     flexDirection: "row",
@@ -585,7 +585,7 @@ const styles = StyleSheet.create({
 
   bubble: {
     position: "relative",
-    maxWidth: "78%",
+    maxWidth: "100%",
     paddingHorizontal: 13,
     paddingTop: 9,
     paddingBottom: 6,

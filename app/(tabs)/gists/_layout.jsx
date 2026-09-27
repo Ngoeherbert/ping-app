@@ -7,6 +7,8 @@ export default function GistsLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="ai" />
+      <Stack.Screen name="ai/chat-info" />
       <Stack.Screen name="[id]" />
       <Stack.Screen name="[id]/chat-info" options={{ presentation: "card" }} />
       <Stack.Screen name="[id]/voice-call" options={{ presentation: "fullScreenModal" }} />

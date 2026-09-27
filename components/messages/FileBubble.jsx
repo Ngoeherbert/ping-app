@@ -178,7 +178,10 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   extText: { color: "#fff", fontSize: 7, fontWeight: "800" },
-  meta: { flex: 1, minWidth: 0 },
+  // The bubble is content-sized, so `flex: 1` (flexBasis: 0) collapses this
+  // column to zero width and the file name never renders. Content-sized with
+  // shrink keeps the name visible and still truncates long names.
+  meta: { flexShrink: 1, minWidth: 0 },
   name: { fontSize: 14, fontWeight: "600" },
   nameMine: { color: "#FFFFFF" },
   nameTheirs: { color: "#111111" },

@@ -94,10 +94,10 @@ export default function VoiceBubble({
           </Text>
           <Text style={[styles.time, isMine ? styles.timeMine : styles.timeTheirs]}>
             {time}
-          </Text>
           {showStatus && (
             <Icon name="check" size={13} color={isMine ? "#DDDDDD" : "#777777"} />
           )}
+          </Text>
         </View>
       )}
     </View>
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    minWidth: 0,
+    minWidth: "64%",
     maxWidth: "100%",
     flexShrink: 1,
   },
@@ -131,6 +131,7 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 6,
     marginTop: 4,
     marginLeft: 42,
