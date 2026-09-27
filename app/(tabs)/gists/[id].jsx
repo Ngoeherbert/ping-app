@@ -1,509 +1,92 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   FlatList,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as ImagePicker from "expo-image-picker";
-import * as DocumentPicker from "expo-document-picker";
-import * as Haptics from "expo-haptics";
 import Avatar from "../../../components/ui/Avatar";
 import Icon from "../../../components/ui/Icon";
 import MessageBubble from "../../../components/messages/MessageBubble";
 import MessageComposer from "../../../components/messages/MessageComposer";
-import ComposerPanel, { PANEL_IDS } from "../../../components/messages/ComposerPanel";
+import ComposerPanel from "../../../components/messages/ComposerPanel";
 import MediaDraft from "../../../components/messages/MediaDraft";
 import ImagePreviewScreen from "../../../components/messages/ImagePreviewScreen";
 import SwipeToReply from "../../../components/messages/SwipeToReply";
-import { messagePreview } from "../../../components/messages/ReplyQuote";
 import TypingIndicator from "../../../components/messages/TypingIndicator";
-import useVoiceRecorder from "../../../components/messages/useVoiceRecorder";
-import { getConversation, getThread, messageSenderKey, resolveMessageSender } from "../../../lib/gists";
+import useChatComposer from "../../../components/messages/useChatComposer";
+import {
+  DateDivider,
+  dateDividerStyles,
+  getPreviousMessageInRun,
+  shouldShowSenderHeader,
+  withDateDividers,
+} from "../../../components/messages/transcript";
+import { getConversation, getThread, resolveMessageSender } from "../../../lib/gists";
 import { palette } from "../../../constants/colors";
-
-const MAX_MEDIA_ITEMS = 10;
-
-function now() {
-  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function mediaItemFromAsset(asset) {
-  const type = asset?.type ?? asset?.kind ?? "";
-  const kind = type === "video" || type === "pairedVideo"
-    || String(type).startsWith("video")
-    || asset?.mimeType?.startsWith("video/")
-    ? "video"
-    : "image";
-
-  return {
-    kind,
-    uri: asset?.uri,
-    assetId: asset?.assetId || undefined,
-    width: asset?.width || undefined,
-    height: asset?.height || undefined,
-    duration: asset?.duration ? Math.max(0, asset.duration / 1000) : undefined,
-    fileName: asset?.fileName || undefined,
-    fileSize: asset?.fileSize || undefined,
-    mimeType: asset?.mimeType || undefined,
-  };
-}
-
-function DateDivider({ label }) {
-  return (
-    <View style={styles.dateDividerWrap}>
-      <View style={styles.dateDividerLine} />
-      <Text style={styles.dateDividerText}>{label}</Text>
-      <View style={styles.dateDividerLine} />
-    </View>
-  );
-}
-
-function withDateDividers(messages) {
-  if (!Array.isArray(messages) || messages.length === 0) return [];
-
-  const result = [];
-  let lastDate = null;
-
-  for (const msg of messages) {
-    const msgDate = msg.date ?? getDateLabel(msg.time);
-    if (msgDate !== lastDate) {
-      result.push({ id: `divider-${String(msgDate)}`, type: "divider", label: msgDate });
-      lastDate = msgDate;
-    }
-    result.push(msg);
-  }
-
-  return result;
-}
-
-function getDateLabel(timeStr) {
-  if (!timeStr) return "Today";
-  if (/^\d{1,2}:\d{2}/.test(timeStr)) return "Today";
-  return timeStr;
-}
-
-function getPreviousMessageInRun(list, index) {
-  if (index <= 0) return null;
-  const previous = list[index - 1];
-  return previous?.type === "divider" ? null : previous;
-}
-
-function shouldShowSenderHeader({ item, previousMessage, conversation, isGroupChat }) {
-  if (!isGroupChat || item.isMine) return false;
-  const currentKey = messageSenderKey(item, conversation);
-  const previousKey = previousMessage ? messageSenderKey(previousMessage, conversation) : null;
-  return !(currentKey && previousKey && currentKey === previousKey);
-}
 
 export default function GistThreadScreen() {
   const { id } = useLocalSearchParams();
   const conversation = getConversation(id);
   const isGroupChat = conversation?.isGroup === true;
   const seed = useMemo(() => getThread(id), [id]);
-  const [messages, setMessages] = useState(seed);
-  const listData = useMemo(() => withDateDividers(messages), [messages]);
-  // Which composer panel is showing, or null when the keyboard has the space.
-  // One modal serves attachments, emoji and games — the entry point picks the
-  // content instead of a tab bar. See ComposerPanel.
-  const [activePanel, setActivePanel] = useState(null);
-  const panelOpen = activePanel !== null;
-  // Whether the keyboard was up when the panel opened — the panel only hands
-  // the space back to the keyboard if the keyboard was there to begin with.
-  const [restoreKeyboard, setRestoreKeyboard] = useState(false);
-  const [typing, setTyping] = useState(false);
-  const [replyingTo, setReplyingTo] = useState(null);
-  const [mediaDraft, setMediaDraft] = useState(null);
-  // A recorded take nobody has sent yet — it waits in the composer's preview bar.
-  const [voiceDraft, setVoiceDraft] = useState(null);
-  const [focusRequest, setFocusRequest] = useState(0);
-  const typingTimer = useRef(null);
+
   const listRef = useRef(null);
-  const composerRef = useRef(null);
-  const messageSequenceRef = useRef(0);
-  // Layout measurements used to make the attachment panel take over the exact
-  // band the keyboard occupied.
-  const kavHeightRef = useRef(0);
-  const composerBottomRef = useRef(0);
-  const lastBandRef = useRef(0);
-  const [panelHeight, setPanelHeight] = useState(300);
 
-  const onKavLayout = (e) => {
-    kavHeightRef.current = e.nativeEvent.layout.height;
-  };
-
-  const onComposerLayout = (e) => {
-    const { y, height } = e.nativeEvent.layout;
-    composerBottomRef.current = y + height;
-  };
-
-  // Android resizes the window instead of padding it, so there is no gap to
-  // measure — remember the reported keyboard height for the panel instead.
-  useEffect(() => {
-    if (Platform.OS === "ios") return undefined;
-    const sub = Keyboard.addListener("keyboardDidShow", (e) => {
-      const h = Math.round(e?.endCoordinates?.height ?? 0);
-      if (h > 0) lastBandRef.current = h;
-    });
-    return () => sub.remove();
-  }, []);
-
-  const closePanel = useCallback(() => setActivePanel(null), []);
-
-  const push = (msg) => {
-    const isMedia =
-      msg.kind === "image" || msg.kind === "photo" || msg.kind === "video";
-    const hasCaption = Boolean(String(msg.text ?? msg.caption ?? "").trim());
-    const groupSender = isGroupChat
-      ? { senderId: "you", sender: { name: "You", avatar: null } }
-      : {};
-
-    if (isMedia) {
-      const feedback = hasCaption
-        ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-        : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      feedback.catch(() => {});
-    }
-
-    const messageId = `m-${Date.now()}-${(messageSequenceRef.current += 1)}`;
-    setMessages((current) => [
-      ...current,
-      {
-        id: messageId,
-        time: now(),
-        status: "sent",
-        isMine: true,
-        kind: "text",
-        ...groupSender,
-        ...msg,
-      },
-    ]);
-    closePanel();
-    requestAnimationFrame(() => listRef.current?.scrollToEnd?.({ animated: true }));
-  };
-
-  const replySnapshot = useCallback((message) => ({
-    id: message.id,
-    senderName: message.isMine
-      ? "You"
-      : resolveMessageSender(message, conversation).name ?? conversation?.senderName ?? conversation?.name ?? "Them",
-    preview: messagePreview(message),
-    isMine: Boolean(message.isMine),
-  }), [conversation]);
-
-  const startReply = useCallback((message) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    closePanel();
-    setReplyingTo(replySnapshot(message));
-    if (!mediaDraft) setFocusRequest((value) => value + 1);
-  }, [mediaDraft, replySnapshot, closePanel]);
-
-  const send = (text, options = {}) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    push({
-      kind: "text",
-      text,
-      viewOnce: options.viewOnce === true,
-      replyTo: replyingTo ?? undefined,
-    });
-    setReplyingTo(null);
-  };
-
-  const markViewOnceViewed = useCallback((messageId) => {
-    setMessages((current) =>
-      current.map((message) => {
-        if (message.id !== messageId) return message;
-        const consumed = { ...message, viewed: true };
-        delete consumed.text;
-        delete consumed.message;
-        delete consumed.caption;
-        delete consumed.uri;
-        delete consumed.url;
-        delete consumed.localUri;
-        delete consumed.waveform;
-        return consumed;
-      }),
-    );
-  }, []);
-
-  const {
-    recording,
-    durationMillis: recordingDurationMillis,
-    start: startVoiceRecording,
-    stop: stopVoiceRecording,
-    discard: discardRecording,
-  } = useVoiceRecorder({
-    onStart: () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      closePanel();
-      Keyboard.dismiss();
-    },
-    // Releasing the mic only stops the take. It parks in the composer so the
-    // user can play it back, then send or throw it away on purpose.
-    onRecorded: ({ uri, duration, viewOnce }) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      setVoiceDraft({ uri, duration, viewOnce });
-    },
-    // Releasing under the minimum just drops the take: nothing is sent, and an
-    // alert here would only nag someone who let go a moment early.
-    onCanceled: () => {
-      setVoiceDraft(null);
-    },
+  // Every screen that holds a conversation wires up this hook and renders what
+  // it hands back, so the composer, the panel, replies and media behave the
+  // same everywhere. See useChatComposer.
+  const chat = useChatComposer({
+    conversation,
+    listRef,
+    initialMessages: seed,
   });
+  const {
+    messages,
+    typing,
+    markViewOnceViewed,
+    startReply,
+    replyingTo,
+    setReplyingTo,
+    send,
+    onTyping,
+    activePanel,
+    panelOpen,
+    restoreKeyboard,
+    panelHeight,
+    setActivePanel,
+    togglePanel,
+    toggleEmojiPanel,
+    closePanel,
+    mediaDraft,
+    setMediaDraft,
+    pickAdditionalMedia,
+    replaceDraft,
+    sendMedia,
+    takePhoto,
+    onAttach,
+    insertEmoji,
+    startGame,
+    recording,
+    recordingDuration,
+    voiceDraft,
+    startVoiceRecording,
+    stopVoiceRecording,
+    sendVoiceDraft,
+    discardVoiceDraft,
+    setVoiceDraftViewOnce,
+    composerRef,
+    focusRequest,
+    onKavLayout,
+    onComposerLayout,
+  } = chat;
 
-  const sendVoiceDraft = () => {
-    const draft = voiceDraft;
-    if (!draft) return;
-    setVoiceDraft(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    push({
-      kind: "voice",
-      uri: draft.uri,
-      duration: draft.duration,
-      viewOnce: draft.viewOnce,
-      replyTo: replyingTo ?? undefined,
-    });
-    setReplyingTo(null);
-  };
-
-  const discardVoiceDraft = () => {
-    const draft = voiceDraft;
-    if (!draft) return;
-    setVoiceDraft(null);
-    discardRecording(draft.uri);
-  };
-
-  // The view-once button stays on screen for as long as a take is pending, so it
-  // has to be able to re-arm the note before it goes out.
-  const setVoiceDraftViewOnce = (next) => {
-    setVoiceDraft((current) => (current ? { ...current, viewOnce: next } : current));
-  };
-
-  const onTyping = () => {
-    setTyping(true);
-    if (typingTimer.current) clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => setTyping(false), 1800);
-  };
-
-  const applyAssetToDraft = (asset, replace = false, viewOnce = false) => {
-    const media = mediaItemFromAsset(asset);
-    setMediaDraft((current) => ({
-      ...media,
-      assets: [media],
-      viewOnce: replace ? Boolean(current?.viewOnce ?? viewOnce) : viewOnce,
-      caption: replace ? current?.caption ?? "" : "",
-      stickers: replace ? current?.stickers ?? [] : [],
-    }));
-    closePanel();
-  };
-
-  const pickImage = async (kind, replace = false, viewOnce = false) => {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert("Permission needed", "Allow photo library access to choose media.");
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: [kind === "video" ? "videos" : "images"],
-        allowsEditing: false,
-        quality: 0.85,
-        allowsMultipleSelection: false,
-        selectionLimit: 1,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      applyAssetToDraft(result.assets[0], replace, viewOnce);
-    } catch (error) {
-      Alert.alert("Couldn't choose media", String(error?.message ?? error));
-    }
-  };
-
-  const pickAdditionalMedia = async () => {
-    const currentCount = Array.isArray(mediaDraft?.assets) && mediaDraft.assets.length
-      ? mediaDraft.assets.length
-      : mediaDraft?.uri
-        ? 1
-        : 0;
-    if (currentCount >= MAX_MEDIA_ITEMS) {
-      Alert.alert("Media limit reached", `You can attach up to ${MAX_MEDIA_ITEMS} items.`);
-      return;
-    }
-
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert("Permission needed", "Allow photo library access to choose media.");
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images", "videos"],
-        allowsEditing: false,
-        quality: 0.85,
-        allowsMultipleSelection: true,
-        selectionLimit: MAX_MEDIA_ITEMS - currentCount,
-      });
-      if (result.canceled || !result.assets?.length) return;
-
-      const additions = result.assets.map(mediaItemFromAsset).filter((item) => item.uri);
-      setMediaDraft((current) => {
-        if (!current) return current;
-        const existing = Array.isArray(current.assets) && current.assets.length
-          ? current.assets
-          : [mediaItemFromAsset(current)];
-        const seen = new Set(existing.map((item) => item.uri));
-        const next = [...existing];
-        for (const addition of additions) {
-          if (seen.has(addition.uri)) continue;
-          seen.add(addition.uri);
-          next.push(addition);
-          if (next.length >= MAX_MEDIA_ITEMS) break;
-        }
-        const [primary] = next;
-        return {
-          ...current,
-          ...primary,
-          assets: next,
-          caption: current.caption ?? "",
-          viewOnce: current.viewOnce === true,
-          stickers: Array.isArray(current.stickers) ? current.stickers : [],
-        };
-      });
-    } catch (error) {
-      Alert.alert("Couldn't add media", String(error?.message ?? error));
-    }
-  };
-
-
-  const takePhoto = async (replace = false, viewOnce = false) => {
-    try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert("Permission needed", "Allow camera access to take a photo or video.");
-        return;
-      }
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ["images", "videos"],
-        allowsEditing: false,
-        quality: 0.85,
-        videoMaxDuration: 60,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      applyAssetToDraft(result.assets[0], replace, viewOnce);
-    } catch (error) {
-      Alert.alert("Couldn't open camera", String(error?.message ?? error));
-    }
-  };
-
-  const sendMedia = ({ caption, viewOnce }) => {
-    const mediaItems = Array.isArray(mediaDraft?.assets) && mediaDraft.assets.length
-      ? mediaDraft.assets
-      : mediaDraft?.uri
-        ? [mediaDraft]
-        : [];
-    if (!mediaItems.length) return;
-
-    const trimmedCaption = String(caption ?? "").trim();
-    mediaItems.forEach((item, index) => {
-      const attachment = mediaItemFromAsset(item);
-      push({
-        ...attachment,
-        text: index === 0 && trimmedCaption ? trimmedCaption : undefined,
-        viewOnce: viewOnce === true,
-        replyTo: replyingTo ?? undefined,
-      });
-    });
-    setMediaDraft(null);
-    setReplyingTo(null);
-  };
-
-  const replaceDraft = () => {
-    if (!mediaDraft) return;
-    if (mediaDraft.kind === "image") takePhoto(true, mediaDraft.viewOnce);
-    else pickImage("video", true, mediaDraft.viewOnce);
-  };
-
-  const pickFile = async (viewOnce = false) => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({
-        type: ["application/pdf", "application/*", "*/*"],
-        copyToCacheDirectory: true,
-      });
-      if (res.canceled || !res.assets?.length) return;
-      const f = res.assets[0];
-      push({
-        kind: "file",
-        uri: f.uri,
-        fileName: f.name ?? "document.pdf",
-        fileSize: f.size,
-        mimeType: f.mimeType ?? "application/pdf",
-        viewOnce,
-      });
-    } catch (e) {
-      Alert.alert("Couldn't pick file", String(e?.message ?? e));
-    }
-  };
-
-  const onAttach = (actionId) => {
-    if (actionId === "image") pickImage("image");
-    else if (actionId === "video") pickImage("video");
-    else if (actionId === "camera") takePhoto();
-    else if (actionId === "file") pickFile();
-    else closePanel();
-  };
-
-  // Emoji picked in the panel go into the composer's input at the caret, so the
-  // panel can stay open (focusing the input would summon the keyboard and
-  // collapse the panel the emoji came from).
-  const insertEmoji = (char) => composerRef.current?.insertEmoji(char);
-
-  // The panel hands over a bare game, or one carrying the picks the popover
-  // collected: a party size above two and/or a variant. Both ride along as a
-  // short suffix on the invite.
-  const startGame = (game) => {
-    if (!game) return;
-    closePanel();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const picks = [
-      game.players > 2 ? `${game.players} players` : null,
-      game.mode || null,
-    ].filter(Boolean).join(" · ");
-    send(picks ? `${game.invite} (${picks})` : game.invite);
-  };
-
-  // The composer panel replaces the keyboard, like a toggle: dismiss the
-  // keyboard and size the panel to the exact band it just occupied, so the
-  // composer and thread stay put. Re-tapping the button that owns the panel
-  // that is already up closes it and hands the space back to the keyboard.
-  const openPanel = (panelId) => {
-    if (activePanel === panelId) {
-      closePanel();
-      return;
-    }
-
-    setRestoreKeyboard(Keyboard.isVisible());
-
-    const band = Math.round(kavHeightRef.current - composerBottomRef.current);
-    if (band > 0) lastBandRef.current = band;
-    if (lastBandRef.current > 0) setPanelHeight(lastBandRef.current);
-
-    Keyboard.dismiss();
-    setActivePanel(panelId);
-  };
-
-  // The paperclip owns the modal as a whole, so it closes whatever is showing.
-  const togglePanel = () => {
-    if (panelOpen) closePanel();
-    else openPanel(PANEL_IDS.attachments);
-  };
-
-  const toggleEmojiPanel = () => openPanel(PANEL_IDS.emojis);
+  const listData = useMemo(() => withDateDividers(messages), [messages]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
@@ -662,7 +245,7 @@ export default function GistThreadScreen() {
               onMicStart={startVoiceRecording}
               onMicFinish={stopVoiceRecording}
               recording={recording}
-              recordingDuration={recordingDurationMillis / 1000}
+              recordingDuration={recordingDuration}
               voiceDraft={voiceDraft}
               onVoiceDraftSend={sendVoiceDraft}
               onVoiceDraftDiscard={discardVoiceDraft}
@@ -716,22 +299,8 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   thread: { paddingTop: 14, paddingBottom: 10 },
   typingWrap: { paddingHorizontal: 14, paddingVertical: 6 },
-  dateDividerWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginVertical: 10,
-    gap: 8,
-  },
-  dateDividerLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: palette.line,
-  },
-  dateDividerText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: palette.muted,
-    textTransform: "capitalize",
-  },
+
+  // The date rules live with the other shared transcript chrome, so every chat
+  // draws them the same way. See components/messages/transcript.jsx.
+  ...dateDividerStyles,
 });

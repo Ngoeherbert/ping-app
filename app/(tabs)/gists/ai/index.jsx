@@ -1,125 +1,152 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, FlatList, Keyboard } from "react-native";
+import React, { useCallback, useMemo, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
 
 import Avatar from "../../../../components/ui/Avatar";
 import Icon from "../../../../components/ui/Icon";
 import MessageBubble from "../../../../components/messages/MessageBubble";
-import AiVoiceBar from "../../../../components/messages/AiVoiceBar";
+import MessageComposer from "../../../../components/messages/MessageComposer";
+import ComposerPanel from "../../../../components/messages/ComposerPanel";
+import MediaDraft from "../../../../components/messages/MediaDraft";
+import ImagePreviewScreen from "../../../../components/messages/ImagePreviewScreen";
+import SwipeToReply from "../../../../components/messages/SwipeToReply";
 import TypingIndicator from "../../../../components/messages/TypingIndicator";
-import useVoiceRecorder from "../../../../components/messages/useVoiceRecorder";
+import useChatComposer from "../../../../components/messages/useChatComposer";
+import {
+  DateDivider,
+  dateDividerStyles,
+  getPreviousMessageInRun,
+  shouldShowSenderHeader,
+  withDateDividers,
+} from "../../../../components/messages/transcript";
+import { resolveMessageSender } from "../../../../lib/gists";
+import {
+  AI_CONVERSATION,
+  AI_NAME,
+  aiOpening,
+  useAiResponder,
+} from "../../../../lib/ai";
 import { palette } from "../../../../constants/colors";
 
 /**
- * AiChatScreen — a voice conversation, not a messenger.
+ * AiChatScreen — the assistant, as an ordinary conversation.
  *
- * Same visual language as the thread (MessageBubble bubbles, the same header
- * shape, the same typing indicator) but deliberately none of its messaging
- * machinery: no text field, no view-once, no attachments, no emoji or games
- * panel, no call buttons and no swipe-to-reply. You tap, you talk, it answers.
+ * A normal chat, assembled entirely from the shared parts: the same
+ * useChatComposer as every gist thread, the same MessageComposer, the same
+ * bubbles, date rules, swipe-to-reply and attachment panel. There is no bespoke
+ * composer and no bespoke transcript chrome here — a chat is a header, a
+ * transcript and the hook, and this screen is exactly that.
  *
- * The transcript is rendered as voice notes rather than text because that is
- * what a voice session produces.
+ * The only thing that makes it the AI chat is that it answers: send anything and
+ * a reply comes back a beat later with the typing dots up in between.
+ *
+ * Talking to it instead of typing is a separate screen — the header button
+ * opens ../voice.
  */
 
-let sequence = 0;
-const nextId = () => `ai-${Date.now()}-${(sequence += 1)}`;
-
-const AI_NAME = "Ping AI";
-const AI_SENDER = { name: AI_NAME, avatar: null };
-
-function now() {
-  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-/** Rotated in order so a conversation still reads as a back-and-forth. */
-const REPLIES = [
-  "Got it — I caught the gist of that. Want me to pull out the action items?",
-  "That's clear. Here's how I'd break it into the next three steps.",
-  "Noted. I can turn that into a short summary, or draft a reply you can send.",
-  "Makes sense. Shall I keep the detail level like that, or trim it down?",
-];
-
-const OPENING = [
-  {
-    id: "ai-open-1",
-    time: "9:41 AM",
-    kind: "text",
-    isMine: false,
-    sender: AI_SENDER,
-    text: `Hi — I'm ${AI_NAME}. This is a voice conversation, so just tap the mic and talk. Ask me for a summary, a draft, or the next step.`,
-  },
-];
-
 export default function AiChatScreen() {
-  const [messages, setMessages] = useState(OPENING);
-  const [thinking, setThinking] = useState(false);
-
   const listRef = useRef(null);
-  const replyTimerRef = useRef(null);
-  const unmountedRef = useRef(false);
-  const turnRef = useRef(0);
 
-  // A pending answer must not land after the screen is gone.
-  useEffect(() => {
-    unmountedRef.current = false;
-    return () => {
-      unmountedRef.current = true;
-      clearTimeout(replyTimerRef.current);
-    };
-  }, []);
-
-  const scrollToEnd = useCallback(() => {
-    requestAnimationFrame(() => listRef.current?.scrollToEnd?.({ animated: true }));
-  }, []);
-
-  const append = useCallback(
-    (message) => {
-      setMessages((current) => [...current, { id: nextId(), time: now(), ...message }]);
-      scrollToEnd();
-    },
-    [scrollToEnd],
-  );
-
-  // Thinking first, answering a beat later — the same rhythm the thread uses.
-  const scheduleReply = useCallback(() => {
-    clearTimeout(replyTimerRef.current);
-    setThinking(true);
-
-    replyTimerRef.current = setTimeout(() => {
-      if (unmountedRef.current) return;
-      setThinking(false);
-      const text = REPLIES[turnRef.current % REPLIES.length];
-      turnRef.current += 1;
-      append({ kind: "text", isMine: false, sender: AI_SENDER, text });
-    }, 900);
-  }, [append]);
-
-  const {
-    recording,
-    durationMillis,
-    start: startListening,
-    stop: stopListening,
-  } = useVoiceRecorder({
-    onStart: () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      Keyboard.dismiss();
-    },
-    // No preview step: in a voice session the finished take just goes out.
-    onRecorded: ({ uri, duration }) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      append({ kind: "voice", isMine: true, status: "sent", uri, duration });
-      scheduleReply();
-    },
-    onCanceled: () => {},
+  // The same hook the gist threads use. The assistant is a conversation like any
+  // other, so it gets the same composer, the same panel, the same reply quoting
+  // and the same media handling — none of it is reimplemented here.
+  const chat = useChatComposer({
+    conversation: AI_CONVERSATION,
+    listRef,
+    initialMessages: aiOpening(
+      `Hi — I'm ${AI_NAME}. Ask me for a summary, a draft, or the next step, and I'll do my best.`,
+    ),
   });
+  const {
+    messages,
+    receive,
+    send,
+    typing,
+    setTyping,
+    beginTyping,
+    markViewOnceViewed,
+    startReply,
+    replyingTo,
+    setReplyingTo,
+    onTyping,
+    activePanel,
+    panelOpen,
+    restoreKeyboard,
+    panelHeight,
+    setActivePanel,
+    togglePanel,
+    toggleEmojiPanel,
+    closePanel,
+    mediaDraft,
+    setMediaDraft,
+    pickAdditionalMedia,
+    replaceDraft,
+    sendMedia,
+    takePhoto,
+    onAttach,
+    insertEmoji,
+    startGame,
+    recording,
+    recordingDuration,
+    voiceDraft,
+    startVoiceRecording,
+    stopVoiceRecording,
+    sendVoiceDraft,
+    discardVoiceDraft,
+    setVoiceDraftViewOnce,
+    composerRef,
+    focusRequest,
+    onKavLayout,
+    onComposerLayout,
+  } = chat;
+
+  const listData = useMemo(() => withDateDividers(messages), [messages]);
+
+  // A pending answer must not land after the screen is gone — the shared
+  // responder owns that, along with the beat of thinking in between.
+  const scheduleReply = useAiResponder({ receive, setTyping, beginTyping });
+
+  // Anything the user sends earns an answer, text or media alike.
+  const handleSend = useCallback((...args) => {
+    send(...args);
+    scheduleReply();
+  }, [send, scheduleReply]);
+
+  const handleSendMedia = useCallback((payload) => {
+    sendMedia(payload);
+    scheduleReply();
+  }, [sendMedia, scheduleReply]);
+
+  // A finished take sent from the composer's preview bar earns an answer too.
+  const handleSendVoiceDraft = useCallback(() => {
+    sendVoiceDraft();
+    scheduleReply();
+  }, [sendVoiceDraft, scheduleReply]);
+
+  const openInfo = useCallback(() => {
+    router.push("/(tabs)/gists/ai/chat-info");
+  }, []);
+
+  // Voice mode is a screen of its own, not a mode this one toggles into: same
+  // assistant, same conversation, but you talk instead of typing.
+  const openVoice = useCallback(() => {
+    router.push("/(tabs)/gists/ai/voice");
+  }, []);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
       {/* Same header shape as the thread — back, avatar, name + presence. The
-          call buttons are the one omission; an info button takes their place. */}
+          call buttons are the one omission: there is nobody to ring, so the info
+          button takes their place. */}
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -133,68 +160,161 @@ export default function AiChatScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Chat info"
-          onPress={() => router.push("/(tabs)/gists/ai/chat-info")}
+          onPress={openInfo}
           style={styles.headAvatar}
         >
           <Avatar uri={null} name="AI" size={40} />
         </Pressable>
 
-        <View style={styles.headMid}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="User info"
+          onPress={openInfo}
+          style={styles.headMid}
+        >
           <Text style={styles.name} numberOfLines={1}>
             {AI_NAME}
           </Text>
           <Text style={styles.presence}>
-            {recording ? "listening…" : thinking ? "typing…" : "Online"}
+            {typing ? "typing…" : "Online"}
           </Text>
-        </View>
+        </Pressable>
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Chat info"
-          onPress={() => router.push("/(tabs)/gists/ai/chat-info")}
-          style={styles.back}
+          accessibilityLabel={`Talk to ${AI_NAME} by voice`}
+          onPress={openVoice}
+          style={styles.headBtn}
         >
-          <Icon name="info" size={20} color={palette.ink} />
+          <Icon name="aiAudio" size={20} color={palette.ink} />
         </Pressable>
       </View>
 
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.thread}
-        onContentSizeChange={() => listRef.current?.scrollToEnd?.({ animated: false })}
-        renderItem={({ item }) => (
-          <MessageBubble
-            item={item}
-            sender={item.isMine ? null : AI_SENDER}
-            isGroup={false}
-            showSenderHeader={false}
-          />
-        )}
-        ListFooterComponent={
-          thinking ? (
-            <View style={styles.typingWrap}>
-              <TypingIndicator />
-            </View>
-          ) : null
-        }
-      />
+      <KeyboardAvoidingView
+        style={styles.body}
+        behavior={Platform.select({ ios: "padding", android: undefined })}
+        keyboardVerticalOffset={0}
+        onLayout={onKavLayout}
+      >
+        <FlatList
+          ref={listRef}
+          data={listData}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={styles.thread}
+          onContentSizeChange={() => listRef.current?.scrollToEnd?.({ animated: false })}
+          renderItem={({ item, index }) => {
+            if (item.type === "divider") {
+              return <DateDivider label={item.label} />;
+            }
 
-      <AiVoiceBar
-        recording={recording}
-        duration={durationMillis / 1000}
-        hint={`Tap the mic to talk to ${AI_NAME}`}
-        onStart={startListening}
-        onStop={stopListening}
-        onDiscard={() => stopListening({ canceled: true })}
-      />
+            const previousMessage = getPreviousMessageInRun(listData, index);
+            // A 1-1 chat, so the group sender header never shows — asked through
+            // the same helper the threads use rather than hardcoded to false.
+            const showSenderHeader = shouldShowSenderHeader({
+              item,
+              previousMessage,
+              conversation: AI_CONVERSATION,
+              isGroupChat: AI_CONVERSATION.isGroup,
+            });
+            const sender = resolveMessageSender(item, AI_CONVERSATION);
+
+            return (
+              <SwipeToReply message={item} onReply={startReply}>
+                <MessageBubble
+                  item={item}
+                  sender={sender}
+                  isGroup={AI_CONVERSATION.isGroup}
+                  showSenderHeader={showSenderHeader}
+                  onReply={startReply}
+                  onViewOnceOpen={() => markViewOnceViewed(item.id)}
+                />
+              </SwipeToReply>
+            );
+          }}
+          ListFooterComponent={
+            typing ? (
+              <View style={styles.typingWrap}>
+                <TypingIndicator />
+              </View>
+            ) : null
+          }
+        />
+
+        <View onLayout={onComposerLayout}>
+          {mediaDraft?.kind === "image" ? (
+            <ImagePreviewScreen
+              visible
+              draft={mediaDraft}
+              receiverName={AI_NAME}
+              onChange={(patch) =>
+                setMediaDraft((current) => ({ ...current, ...patch }))
+              }
+              onAdd={pickAdditionalMedia}
+              onClose={() => setMediaDraft(null)}
+              onSend={handleSendMedia}
+              onTyping={onTyping}
+            />
+          ) : mediaDraft ? (
+            <MediaDraft
+              draft={mediaDraft}
+              replyTo={replyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+              onChange={(patch) =>
+                setMediaDraft((current) => ({ ...current, ...patch }))
+              }
+              onClose={() => setMediaDraft(null)}
+              onReplace={replaceDraft}
+              onSend={handleSendMedia}
+              onTyping={onTyping}
+            />
+          ) : (
+            <MessageComposer
+              ref={composerRef}
+              onSend={handleSend}
+              panelOpen={panelOpen}
+              panel={activePanel}
+              restoreKeyboard={restoreKeyboard}
+              onPanelToggle={togglePanel}
+              onEmojiPress={toggleEmojiPanel}
+              onInputFocus={closePanel}
+              onCamera={(options) => takePhoto(false, options?.viewOnce === true)}
+              onMicStart={startVoiceRecording}
+              onMicFinish={stopVoiceRecording}
+              recording={recording}
+              recordingDuration={recordingDuration}
+              voiceDraft={voiceDraft}
+              onVoiceDraftSend={handleSendVoiceDraft}
+              onVoiceDraftDiscard={discardVoiceDraft}
+              onVoiceDraftViewOnceChange={setVoiceDraftViewOnce}
+              onTyping={onTyping}
+              replyTo={replyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+              focusRequest={focusRequest}
+              placeholder={`Message ${AI_NAME}`}
+            />
+          )}
+        </View>
+
+        {/* ComposerPanel is the LAST child so it grows from the bottom of the
+            column into the exact band the keyboard just freed. */}
+        <ComposerPanel
+          visible={panelOpen && !mediaDraft}
+          panel={activePanel}
+          onPanelChange={setActivePanel}
+          height={panelHeight}
+          onSelect={onAttach}
+          onEmoji={insertEmoji}
+          onGame={startGame}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
+  // Every value below is copied from gists/[id].jsx so the two screens are
+  // pixel-identical. Keep them in lockstep.
+  safe: { flex: 1, backgroundColor: "#FFFFFF" },
 
   header: {
     flexDirection: "row",
@@ -210,8 +330,14 @@ const styles = StyleSheet.create({
   headMid: { flex: 1, minWidth: 0 },
   name: { fontSize: 16, fontWeight: "700", color: palette.ink },
   presence: { fontSize: 12, color: palette.muted, marginTop: 1 },
+  headBtn: { padding: 8 },
+  body: { flex: 1 },
 
   thread: { paddingTop: 14, paddingBottom: 10 },
   typingWrap: { paddingHorizontal: 14, paddingVertical: 6 },
+
+  // The date rules live with the other shared transcript chrome, so every chat
+  // draws them the same way. See components/messages/transcript.jsx.
+  ...dateDividerStyles,
 });
 

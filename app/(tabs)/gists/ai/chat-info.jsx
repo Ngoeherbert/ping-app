@@ -5,8 +5,7 @@ import PhoneScreen from "../../../../components/navigation/PhoneScreen";
 import Icon from "../../../../components/ui/Icon";
 import Avatar from "../../../../components/ui/Avatar";
 import { palette } from "../../../../constants/colors";
-
-const AI_NAME = "Ping AI";
+import { AI_NAME } from "../../../../lib/ai";
 
 /** Facts about the assistant, in the same shape the thread's info screen uses. */
 const AI_DETAILS = [
@@ -40,7 +39,23 @@ export default function AiChatInfoScreen() {
               <Avatar uri={null} name="AI" size={90} />
             </View>
             <Text style={styles.name}>{AI_NAME}</Text>
-            <Text style={styles.status}>Online · replies with voice</Text>
+            <Text style={styles.status}>Online · answers out loud</Text>
+          </View>
+
+          {/* Voice mode is a screen of its own, so it gets a row here rather
+              than a button buried in the transcript. */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Voice</Text>
+            <Pressable
+              onPress={() => router.push("/(tabs)/gists/ai/voice")}
+              accessibilityRole="button"
+              accessibilityLabel="Open voice mode"
+              style={({ pressed }) => [styles.voiceRow, pressed && styles.voiceRowPressed]}
+            >
+              <Icon name="aiAudio" size={20} color={palette.ink} />
+              <Text style={styles.voiceLabel}>Talk to {AI_NAME} instead of typing</Text>
+              <Icon name="forward" size={18} color={palette.muted} />
+            </Pressable>
           </View>
 
           {/* No call buttons: an assistant has no phone line to ring. */}
@@ -110,4 +125,16 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 14, color: palette.ink, fontWeight: "500" },
   infoValue: { fontSize: 14, color: palette.muted },
+
+  voiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: palette.surface,
+  },
+  voiceRowPressed: { opacity: 0.6 },
+  voiceLabel: { flex: 1, fontSize: 14, color: palette.ink, fontWeight: "500" },
 });

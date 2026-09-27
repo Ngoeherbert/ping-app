@@ -552,8 +552,8 @@ export default function MessageBubble(props) {
 
 const styles = StyleSheet.create({
   row: {
-    width: "100%",
-    minWidth: "60%",
+    width: "95%",
+    maxWidth: "100%",
     paddingHorizontal: 14,
     marginBottom: 10,
     flexDirection: "row",
@@ -586,6 +586,13 @@ const styles = StyleSheet.create({
   bubble: {
     position: "relative",
     maxWidth: "100%",
+    // The bubble lives in a column (messageStack), where the default
+    // alignItems:stretch makes it span that column. messageStack's own width
+    // comes from this bubble's content, so the loop resolves to the full row
+    // and every message reads as a full-width block. alignSelf breaks the loop:
+    // the bubble shrink-wraps its text and only wraps when the text runs out
+    // of room. Which side it sits on is the row's job — mineRow/theirRow.
+    alignSelf: "flex-start",
     paddingHorizontal: 13,
     paddingTop: 9,
     paddingBottom: 6,

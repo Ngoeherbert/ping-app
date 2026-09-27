@@ -61,6 +61,7 @@ import {
   Stairs01Icon,
   StarIcon,
   AiTranslateIcon,
+  AiAudioIcon,
   EllipsisIcon,
   InfoIcon,
   Group01Icon,
@@ -100,6 +101,8 @@ const icons = {
   download: Download01Icon,
   copy: Copy01Icon,
   translate: AiTranslateIcon,
+  // The assistant's voice mode: the spark of an AI next to a sound wave.
+  aiAudio: AiAudioIcon,
 
   heart: HeartIcon,
   comment: Comment01Icon,

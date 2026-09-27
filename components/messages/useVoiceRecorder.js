@@ -228,10 +228,21 @@ export default function useVoiceRecorder({
     removeTemporaryRecording(uri);
   }, []);
 
+  // Metering is read synchronously on demand rather than through state, so a
+  // screen can watch the level as often as it likes without re-rendering on
+  // every tick. Only the hands-free caller polls it; everyone else ignores it.
+  const getMetering = useCallback(() => {
+    try {
+      return recorder.getStatus()?.metering ?? 0;
+    } catch {
+      return 0;
+    }
+  }, [recorder]);
+
   return {
     recording,
     durationMillis: recording ? recordingDuration : 0,
-    metering: 0,
+    getMetering,
     start,
     stop,
     discard,
