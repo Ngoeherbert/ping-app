@@ -5,7 +5,7 @@ import Avatar from "../ui/Avatar";
 import Icon from "../ui/Icon";
 import UnreadBadge from "./UnreadBadge";
 
-export default function ConversationItem({ conversation, onPress }) {
+export default function ConversationItem({ conversation, onPress, activeFilter }) {
   const {
     name,
     avatar,
@@ -16,7 +16,50 @@ export default function ConversationItem({ conversation, onPress }) {
     isMuted,
     isGroup,
     senderName,
+    lastCall,
+    lastCallType,
+    lastCallCategory,
+    callFrom,
+    callTime,
+    isConference,
   } = conversation;
+
+  const isCallsMode = activeFilter === "calls";
+
+  const getCallLabel = () => {
+    if (!lastCall || !lastCallCategory) return null;
+
+    const caller =
+      lastCallCategory === "outgoing"
+        ? name
+        : callFrom ?? senderName ?? name;
+
+    const verb =
+      lastCallCategory === "missed"
+        ? "Missed"
+        : lastCallCategory === "outgoing"
+        ? "Outgoing"
+        : "Incoming";
+
+    const typeLabel = lastCallType === "video" ? "video" : "voice";
+    const groupLabel = isConference || isGroup ? ", group" : "";
+
+    return `${verb} ${typeLabel} call${verb === "Missed" ? ` from ${caller}` : groupLabel}`;
+  };
+
+  const getCallIcon = () => {
+    if (!lastCall || !lastCallCategory) return null;
+
+    if (lastCallCategory === "missed") {
+      return <Icon name="callEnd" size={16} color="#E5484D" />;
+    }
+
+    if (lastCallType === "video") {
+      return <Icon name="video" size={16} color="#0B8D71" />;
+    }
+
+    return <Icon name="phone" size={16} color="#0B8D71" />;
+  };
 
   return (
     <Pressable
@@ -38,27 +81,58 @@ export default function ConversationItem({ conversation, onPress }) {
             {name}
           </Text>
 
-          <Text style={[styles.time, unreadCount > 0 && styles.unreadTime]}>
-            {time}
+          <Text
+            style={[
+              styles.time,
+              unreadCount > 0 && styles.unreadTime,
+              isCallsMode && styles.callsTime,
+            ]}
+          >
+            {isCallsMode && callTime ? callTime : time}
           </Text>
         </View>
 
         <View style={styles.bottomRow}>
-          <Text
-            numberOfLines={1}
-            style={[styles.message, unreadCount > 0 && styles.unreadMessage]}
-          >
-            {senderName ? `${senderName}: ` : ""}
-            {lastMessage}
-          </Text>
+          {isCallsMode && lastCall ? (
+            <>
+              {getCallIcon()}
 
-          <View style={styles.meta}>
-            {isMuted && <Icon name="mute" size={15} color="#999999" />}
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.callLabel,
+                  lastCallCategory === "missed" && styles.missedCall,
+                  unreadCount > 0 && styles.unreadMessage,
+                ]}
+              >
+                {getCallLabel()}
+              </Text>
 
-            {isGroup && <Icon name="users" size={15} color="#999999" />}
+              {lastCallCategory === "missed" && conversation.missedCalls ? (
+                <View style={styles.missedBadge}>
+                  <Text style={styles.missedBadgeText}>{conversation.missedCalls}</Text>
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <Text
+              numberOfLines={1}
+              style={[styles.message, unreadCount > 0 && styles.unreadMessage]}
+            >
+              {senderName ? `${senderName}: ` : ""}
+              {lastMessage}
+            </Text>
+          )}
 
-            <UnreadBadge count={unreadCount} />
-          </View>
+          {!isCallsMode && (
+            <View style={styles.meta}>
+              {isMuted && <Icon name="mute" size={15} color="#999999" />}
+
+              {isGroup && <Icon name="users" size={15} color="#999999" />}
+
+              <UnreadBadge count={unreadCount} />
+            </View>
+          )}
         </View>
       </View>
     </Pressable>
@@ -130,6 +204,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  callsTime: {
+    fontSize: 12,
+    color: "#888888",
+  },
+
   bottomRow: {
     marginTop: 5,
     flexDirection: "row",
@@ -149,9 +228,38 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
+  callLabel: {
+    flex: 1,
+    marginRight: 8,
+    fontSize: 14,
+    lineHeight: 19,
+    color: "#777777",
+    marginLeft: 6,
+  },
+
+  missedCall: {
+    color: "#E5484D",
+  },
+
   meta: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+
+  missedBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#E5484D",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+
+  missedBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });

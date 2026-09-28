@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 42,
     maxHeight: 110,
-    paddingVertical: 10,
+    paddingVertical: 14,
     fontSize: 15,
     color: "#111111",
   },

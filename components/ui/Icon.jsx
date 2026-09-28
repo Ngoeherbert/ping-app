@@ -6,6 +6,7 @@ import {
   Search01Icon,
   BellIcon,
   Comment02Icon,
+  Message01Icon,
   User02Icon,
   Settings01Icon,
   ArrowLeft01Icon,
@@ -73,6 +74,16 @@ import {
   Location01Icon,
   CircleSlashIcon,
   CopyPlusIcon,
+  PaletteIcon,
+  DatabaseIcon,
+  Shield01Icon,
+  TrashIcon,
+  LogOutIcon,
+  Flag01Icon,
+  Link01Icon,
+  LockIcon,
+  BlockedIcon,
+  GlobalIcon,
 } from "@hugeicons/core-free-icons";
 
 const icons = {
@@ -80,6 +91,7 @@ const icons = {
   search: Search01Icon,
   notifications: BellIcon,
   messages: Comment02Icon,
+  message: Message01Icon,
   profile: User02Icon,
   settings: Settings01Icon,
   reels: PlayListIcon,
@@ -131,6 +143,7 @@ const icons = {
 
   info: InfoIcon,
   group: Group01Icon,
+  globe: GlobalIcon,
 
   phone: Call02Icon,
   callEnd: CallEnd01Icon,
@@ -146,6 +159,16 @@ const icons = {
   emoji: SmileIcon,
   location: Location01Icon,
   game: Gamepad01Icon,
+
+  palette: PaletteIcon,
+  database: DatabaseIcon,
+  shield: Shield01Icon,
+  trash: TrashIcon,
+  logOut: LogOutIcon,
+  flag: Flag01Icon,
+  link: Link01Icon,
+  lock: LockIcon,
+  block: BlockedIcon,
 
   // game panel
   gameDice: DiceFaces01Icon,

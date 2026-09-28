@@ -6,6 +6,7 @@ const filters = [
   { id: "unread", label: "Unread" },
   { id: "groups", label: "Groups" },
   { id: "channels", label: "Channels" },
+  { id: "calls", label: "Calls" },
 ];
 
 export default function MessageFilters({ activeFilter = "all", onChange }) {

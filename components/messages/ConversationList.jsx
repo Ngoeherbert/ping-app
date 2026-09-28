@@ -6,6 +6,7 @@ import ConversationItem from "./ConversationItem";
 export default function ConversationList({
   conversations = [],
   onConversationPress,
+  activeFilter,
   ListHeaderComponent,
 }) {
   return (
@@ -13,7 +14,11 @@ export default function ConversationList({
       data={conversations}
       keyExtractor={(item) => String(item.id)}
       renderItem={({ item }) => (
-        <ConversationItem conversation={item} onPress={onConversationPress} />
+        <ConversationItem
+          conversation={item}
+          onPress={onConversationPress}
+          activeFilter={activeFilter}
+        />
       )}
       ListHeaderComponent={ListHeaderComponent}
       ListEmptyComponent={
