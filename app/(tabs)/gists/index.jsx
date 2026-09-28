@@ -6,7 +6,7 @@ import Icon from "../../../components/ui/Icon";
 import MessageFilters from "../../../components/messages/MessageFilters";
 import ConversationList from "../../../components/messages/ConversationList";
 import NewMessageSheet from "../../../components/messages/NewMessageSheet";
-import { CONVERSATIONS } from "../../../lib/gists";
+import { getChatList } from "../../../lib/mockData";
 import { palette } from "../../../constants/colors";
 
 export default function GistsScreen() {
@@ -30,7 +30,7 @@ export default function GistsScreen() {
   };
 
   const conversations = useMemo(() => {
-    const list = Array.isArray(CONVERSATIONS) ? CONVERSATIONS : [];
+    const list = getChatList();
     const q = query.trim().toLowerCase();
     return list.filter((c) => {
       if (filter === "unread" && !(c.unreadCount > 0)) return false;

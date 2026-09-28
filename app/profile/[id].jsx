@@ -3,8 +3,9 @@ import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import Avatar from "../../components/ui/Avatar";
 import Icon from "../../components/ui/Icon";
+import VerifiedBadge from "../../components/ui/VerifiedBadge";
 import { palette } from "../../constants/colors";
-import { getConversation } from "../../lib/gists";
+import { getProfileById } from "../../lib/mockData";
 import PhoneScreen from "../../components/navigation/PhoneScreen";
 
 const STATS = [
@@ -15,19 +16,35 @@ const STATS = [
 
 export default function ProfileIdScreen() {
   const { id } = useLocalSearchParams();
-  const conversation = getConversation(id);
+  const profile = getProfileById(id);
 
-  const name = conversation?.name ?? "Unknown";
-  const avatar = conversation?.avatar ?? undefined;
+  const name = profile?.name ?? "Unknown";
+  const handle = profile?.handle ?? `@${name.toLowerCase().replace(/ /g, "")}`;
+  const avatar = profile?.avatar ?? undefined;
+  const verified = profile?.verified ?? false;
+  const verifiedVariant = profile?.verifiedVariant ?? "blue";
+  const location = profile?.location ?? null;
 
   return (
     <PhoneScreen>
       <View style={styles.top}>
         <View style={styles.avatar}>
           <Avatar uri={avatar} name={name} size={92} />
+          {verified && <VerifiedBadge variant={verifiedVariant} size={18} />}
         </View>
-        <Text style={styles.name}>{name}</Text>
-        <Text style={styles.handle}>@{name.toLowerCase().replace(/ /g, "")} · Lagos, Nigeria</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name}>{name}</Text>
+          {verified && <VerifiedBadge variant={verifiedVariant} size={14} />}
+        </View>
+        <Text style={styles.handle}>
+          {handle}
+          {location && (
+            <>
+              {" · "}
+              <Text style={styles.location}>{location}</Text>
+            </>
+          )}
+        </Text>
         <View style={styles.stats}>
           {STATS.map((s) => (
             <View key={s.l} style={styles.stat}>
@@ -37,13 +54,13 @@ export default function ProfileIdScreen() {
           ))}
         </View>
         <View style={styles.btnRow}>
-          <Pressable style={styles.primaryBtn}>
+          <Pressable style={styles.primaryBtn} accessibilityRole="button">
             <Text style={styles.primaryTxt}>Message</Text>
           </Pressable>
-          <Pressable style={styles.iconBtn}>
+          <Pressable style={styles.iconBtn} accessibilityRole="button">
             <Icon name="settings" size={20} color={palette.ink} />
           </Pressable>
-          <Pressable style={styles.iconBtn}>
+          <Pressable style={styles.iconBtn} accessibilityRole="button">
             <Icon name="share" size={20} color={palette.ink} />
           </Pressable>
         </View>
@@ -62,8 +79,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  name: { fontSize: 22, fontWeight: "800", color: palette.ink, marginTop: 12 },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+  },
+  name: { fontSize: 22, fontWeight: "800", color: palette.ink },
   handle: { fontSize: 14, color: palette.muted, marginTop: 2 },
+  location: { color: palette.ink, opacity: 0.7 },
   stats: { flexDirection: "row", gap: 28, marginTop: 16 },
   stat: { alignItems: "center" },
   statV: { fontSize: 17, fontWeight: "800", color: palette.ink },

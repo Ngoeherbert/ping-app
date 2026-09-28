@@ -11,6 +11,8 @@ export const palette = {
   success: '#16A34A',
   danger: '#E5484D',
   warning: '#F5A524',
+  verified: '#1D9BF0',
+  verifiedGold: '#FFD700',
 };
 
 export const darkPalette = {
@@ -23,6 +25,8 @@ export const darkPalette = {
   primary: '#7C7AFF',
   primarySoft: '#23233A',
   dark: '#101014',
+  verified: '#3EA6FF',
+  verifiedGold: '#FFD700',
 };
 
 export default palette;

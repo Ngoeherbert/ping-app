@@ -16,9 +16,8 @@ import {
   Tick01Icon,
   PencilEdit02Icon,
   Delete02Icon,
-  Share08Icon,
   SentIcon,
-  Bookmark01Icon,
+  Bookmark02Icon,
   Download01Icon,
   HeartIcon,
   Comment01Icon,
@@ -68,6 +67,7 @@ import {
   Group01Icon,
   LoaderCircleIcon,
   XIcon,
+  BadgeCheckIcon,
   PictureInPicture01Icon,
   PictureInPictureExitIcon,
   SparklesIcon,
@@ -84,6 +84,7 @@ import {
   LockIcon,
   BlockedIcon,
   GlobalIcon,
+  Share03Icon,
 } from "@hugeicons/core-free-icons";
 
 const icons = {
@@ -99,6 +100,7 @@ const icons = {
   back: ArrowLeft01Icon,
   forward: LinkForwardIcon,
   reply: LinkBackwardIcon,
+  share: Share03Icon,
   more: EllipsisIcon,
   close: Cancel01Icon,
 
@@ -106,14 +108,12 @@ const icons = {
   check: Tick01Icon,
   edit: PencilEdit02Icon,
   delete: Delete02Icon,
-  share: Share08Icon,
   send: SentIcon,
-  bookmark: Bookmark01Icon,
+  bookmark: Bookmark02Icon,
   star: StarIcon,
   download: Download01Icon,
   copy: Copy01Icon,
   translate: AiTranslateIcon,
-  // The assistant's voice mode: the spark of an AI next to a sound wave.
   aiAudio: AiAudioIcon,
 
   heart: HeartIcon,
@@ -183,6 +183,7 @@ const icons = {
 
   spinner: LoaderCircleIcon,
   x: XIcon,
+  badgeCheck: BadgeCheckIcon,
 
   // filter icons
   none: CircleSlashIcon,

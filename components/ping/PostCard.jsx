@@ -3,53 +3,53 @@ import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import Avatar from "../ui/Avatar";
 import Icon from "../ui/Icon";
 import Card from "../ui/Card";
-import Divider from "../ui/Divider";
+import VerifiedBadge from "../ui/VerifiedBadge";
 import { palette } from "../../constants/colors";
 import { radius } from "../../constants/radius";
+import { formatLikes } from "../../lib/mockData";
 
-const VERIFIED_BLUE = "#1D9BF0";
 const LIKE_PINK = "#F0407F";
 const RING_PINK = "#F2A7C6";
 const SEE_MORE_LIMIT = 90;
 
-export const formatLikes = (n) =>
-  n >= 100 ? `${Math.floor(n / 10) * 10}+` : `${n}`;
+export function PostHeader({ post, onFollow, onMore, onProfilePress }) {
+  const { user, avatar, verified, verifiedVariant, time, tagged, showFollow } = post;
 
-function MoreDots({ color = palette.ink }) {
-  return (
-    <View style={styles.moreDots}>
-      <View style={[styles.dot, { backgroundColor: color }]} />
-      <View style={[styles.dot, { backgroundColor: color }]} />
-      <View style={[styles.dot, { backgroundColor: color }]} />
-    </View>
-  );
-}
-
-export function PostHeader({ post, onFollow, onMore }) {
-  const { user, avatar, verified, time, tagged, showFollow } = post;
-  const [following, setFollowing] = useState(false);
+  const handleProfilePress = () => {
+    onProfilePress && onProfilePress(post);
+  };
 
   return (
     <View style={styles.cardHeader}>
-      <View style={styles.avatarWrap}>
+      <Pressable
+        onPress={handleProfilePress}
+        style={styles.avatarWrap}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${user}'s profile`}
+      >
         <Avatar uri={avatar} name={user} size={44} />
-        {verified && (
-          <View style={styles.verifiedBadge}>
-            <Icon name="check" size={9} color="#FFFFFF" />
-          </View>
-        )}
-      </View>
+      </Pressable>
 
-      <View style={styles.meta}>
-        <Text style={styles.user} numberOfLines={1}>
-          {user}
-        </Text>
+      <Pressable
+        onPress={handleProfilePress}
+        style={styles.meta}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${user}'s profile`}
+      >
+        <View style={styles.userRow}>
+          <Text style={styles.user} numberOfLines={1}>
+            {user}
+          </Text>
+          {verified && (
+            <VerifiedBadge variant={verifiedVariant || "blue"} size={18} inline />
+          )}
+        </View>
         <View style={styles.timeRow}>
           <Text style={styles.time}>{time}</Text>
-          <Divider vertical size={12} color={palette.muted} style={styles.timeDivider} />
+          <View style={styles.timeDivider} />
           <Icon name="globe" size={13} color={palette.muted} />
         </View>
-      </View>
+      </Pressable>
 
       {tagged.length > 0 && (
         <View style={styles.taggedRow}>
@@ -66,14 +66,12 @@ export function PostHeader({ post, onFollow, onMore }) {
 
       {showFollow && (
         <Pressable
-          onPress={() => setFollowing((f) => !f)}
-          style={[styles.followBtn, following && styles.followBtnActive]}
+          onPress={onFollow}
+          style={styles.followBtn}
           accessibilityRole="button"
-          accessibilityLabel={following ? `Unfollow ${user}` : `Follow ${user}`}
+          accessibilityLabel={`Follow ${user}`}
         >
-          <Text style={[styles.followText, following && styles.followTextActive]}>
-            {following ? "Following" : "Follow"}
-          </Text>
+          <Text style={styles.followText}>Follow</Text>
         </Pressable>
       )}
 
@@ -83,7 +81,7 @@ export function PostHeader({ post, onFollow, onMore }) {
         accessibilityRole="button"
         accessibilityLabel="More options"
       >
-        <MoreDots />
+        <Icon name="more" size={22} color={palette.ink} strokeWidth={1.5} />
       </Pressable>
     </View>
   );
@@ -149,7 +147,11 @@ export function PostActions({ post, liked, saved, onLike, onComment, onShare, on
           accessibilityRole="button"
           accessibilityLabel={`Like ${post.user}`}
         >
-          <Icon name="heart" size={22} color={liked ? LIKE_PINK : palette.muted} />
+          <Icon
+            name="heart"
+            size={22}
+            color={liked ? LIKE_PINK : palette.muted}
+          />
           <Text style={styles.actionText}>
             <Text style={styles.actionCount}>{formatLikes(likeCount)}</Text> Likes
           </Text>
@@ -184,26 +186,40 @@ export function PostActions({ post, liked, saved, onLike, onComment, onShare, on
           accessibilityRole="button"
           accessibilityLabel="Bookmark"
         >
-          <Icon name="bookmark" size={22} color={saved ? palette.primary : palette.muted} />
+          <Icon
+            name="bookmark"
+            size={22}
+            color={saved ? palette.primary : palette.muted}
+          />
         </Pressable>
       </View>
     </View>
   );
 }
 
-export default function PostCard({ post, onFollow, onMore, onLike, onComment, onShare, onSave }) {
+export default function PostCard({
+  post,
+  onFollow,
+  onMore,
+  onProfilePress,
+  onLike,
+  onComment,
+  onShare,
+  onSave,
+}) {
   const [liked, setLiked] = useState(post.liked);
   const [saved, setSaved] = useState(false);
 
   return (
     <Card style={styles.card} padding={14} elevated>
-      <PostHeader post={post} onFollow={onFollow} onMore={onMore} />
+      <PostHeader
+        post={post}
+        onFollow={onFollow}
+        onMore={onMore}
+        onProfilePress={onProfilePress}
+      />
       <PostBody post={post} />
       <PostMedia media={post.media} />
-      <Divider
-        color={palette.line}
-        style={{ marginVertical: 12 }}
-      />
       <PostActions
         post={post}
         liked={liked}
@@ -230,21 +246,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  avatarWrap: { marginRight: 10 },
-  verifiedBadge: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 17,
-    height: 17,
-    borderRadius: 9,
-    backgroundColor: VERIFIED_BLUE,
-    borderWidth: 2,
-    borderColor: palette.card,
+  avatarWrap: {
+    marginRight: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  meta: { flex: 1, minWidth: 0 },
+   meta: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 4,
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   user: {
     fontSize: 16,
     fontWeight: "700",
@@ -260,6 +276,9 @@ const styles = StyleSheet.create({
     color: palette.muted,
   },
   timeDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 12,
+    backgroundColor: palette.muted,
     marginHorizontal: 8,
   },
 
@@ -298,12 +317,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  moreDots: { flexDirection: "row", alignItems: "center", gap: 3 },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-  },
 
   pingText: {
     fontSize: 15,
@@ -320,6 +333,8 @@ const styles = StyleSheet.create({
   },
 
   mediaWrap: {
+    width: "100%",
+    aspectRatio: 1,
     borderRadius: radius.lg,
     overflow: "hidden",
     marginBottom: 12,
@@ -349,9 +364,9 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   footerLeft: { flexDirection: "row", alignItems: "center", gap: 16 },
-  footerRight: { flexDirection: "row", alignItems: "center", gap: 14 },
+  footerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   action: { flexDirection: "row", alignItems: "center", gap: 6 },
-  iconAction: { padding: 2 },
+  iconAction: { padding: 0 },
   actionText: { fontSize: 14, color: palette.muted },
   actionCount: { color: palette.ink, fontWeight: "500" },
 });

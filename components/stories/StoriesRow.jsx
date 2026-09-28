@@ -12,7 +12,7 @@ export function StoryTile({ story, onPress }) {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.storyTile, { borderColor: story.seen ? "#D5D8DD" : LIKE_PINK }]}
+      style={[styles.storyTile, { borderColor: story.seen ? "#D5D8DD" : LIKE_PINK, borderWidth: 0 }]}
       accessibilityRole="button"
       accessibilityLabel="Open story"
     >
@@ -112,7 +112,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: "hidden",
     backgroundColor: palette.line,
-    borderWidth: 2,
   },
   storyCover: { ...StyleSheet.absoluteFillObject },
   storyRing: {
