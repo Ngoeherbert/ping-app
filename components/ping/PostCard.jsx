@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import Avatar from "../ui/Avatar";
 import Icon from "../ui/Icon";
@@ -224,7 +224,10 @@ export default function PostCard({
         post={post}
         liked={liked}
         saved={saved}
-        onLike={() => setLiked((l) => !l)}
+        onLike={useCallback(() => {
+          setLiked((l) => !l);
+          onLike?.();
+        }, [onLike])}
         onSave={() => setSaved((s) => !s)}
         onComment={onComment}
         onShare={onShare}

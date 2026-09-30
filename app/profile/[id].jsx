@@ -30,11 +30,10 @@ export default function ProfileIdScreen() {
       <View style={styles.top}>
         <View style={styles.avatar}>
           <Avatar uri={avatar} name={name} size={92} />
-          {verified && <VerifiedBadge variant={verifiedVariant} size={18} />}
         </View>
         <View style={styles.nameRow}>
           <Text style={styles.name}>{name}</Text>
-          {verified && <VerifiedBadge variant={verifiedVariant} size={14} />}
+          {verified && <VerifiedBadge variant={verifiedVariant} size={20} />}
         </View>
         <Text style={styles.handle}>
           {handle}

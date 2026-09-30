@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState, useRef } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import PhoneScreen from "../../components/navigation/PhoneScreen";
@@ -6,10 +6,12 @@ import Icon from "../../components/ui/Icon";
 import { palette } from "../../constants/colors";
 import PostCard from "../../components/ping/PostCard";
 import StoriesRow from "../../components/stories/StoriesRow";
+import CommentModal from "../../components/ping/CommentModal";
+import LikeModal from "../../components/ping/LikeModal";
 import { useFeed } from "../../hooks/useFeed";
 import { useStoriesData } from "../../hooks/useStoriesData";
 
-function HomeHeader({ onSearch, onNotifications }) {
+function HomeHeader({ onDiscover, onNotifications }) {
   return (
     <View style={styles.header}>
       <Text style={styles.logo}>Ping</Text>
@@ -17,10 +19,10 @@ function HomeHeader({ onSearch, onNotifications }) {
         <Pressable
           style={styles.iconBtn}
           accessibilityRole="button"
-          accessibilityLabel="Search"
-          onPress={onSearch}
+          accessibilityLabel="Discover"
+          onPress={onDiscover}
         >
-          <Icon name="search" size={22} color={palette.ink} />
+          <Icon name="squarePlus" size={24} color={palette.ink} />
         </Pressable>
         <Pressable
           style={styles.iconBtn}
@@ -41,6 +43,11 @@ export default function HomeScreen() {
   const { pings, loadingMore, refreshing, onEndReached, onRefresh } = useFeed();
   const { stories, myProfile, onOpenStory, onStartStory } = useStoriesData();
 
+  const commentModalRef = useRef(null);
+  const likeModalRef = useRef(null);
+  const [activeCommentId, setActiveCommentId] = useState(null);
+  const [activeLikeId, setActiveLikeId] = useState(null);
+
   const handleProfilePress = useCallback(
     (post) => {
       if (post.userId) {
@@ -50,9 +57,26 @@ export default function HomeScreen() {
     [router]
   );
 
+  const handleComment = useCallback((post) => {
+    setActiveCommentId(post.id);
+    setTimeout(() => {
+      commentModalRef.current?.open();
+    }, 50);
+  }, []);
+
+  const handleLike = useCallback((post) => {
+    setActiveLikeId(post.id);
+    setTimeout(() => {
+      likeModalRef.current?.open();
+    }, 50);
+  }, []);
+
   return (
     <PhoneScreen padded={false}>
-      <HomeHeader />
+      <HomeHeader
+        onDiscover={() => router.push("/(tabs)/discover")}
+        onNotifications={() => {}}
+      />
 
       <ScrollView
         contentContainerStyle={styles.feed}
@@ -81,9 +105,23 @@ export default function HomeScreen() {
             key={p.id}
             post={p}
             onProfilePress={handleProfilePress}
+            onComment={() => handleComment(p)}
+            onLike={() => handleLike(p)}
           />
         ))}
       </ScrollView>
+
+      <CommentModal
+        ref={commentModalRef}
+        postId={activeCommentId}
+        onClose={() => setActiveCommentId(null)}
+      />
+
+      <LikeModal
+        ref={likeModalRef}
+        postId={activeLikeId}
+        onClose={() => setActiveLikeId(null)}
+      />
     </PhoneScreen>
   );
 }
@@ -100,7 +138,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.card,
   },
   logo: { fontSize: 24, fontWeight: "800", color: palette.ink },
-  headerIcons: { flexDirection: "row", gap: 4 },
+  headerIcons: { flexDirection: "row" },
   iconBtn: {
     width: 44,
     height: 44,
@@ -110,8 +148,8 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: 10,
+    right: 12,
     width: 8,
     height: 8,
     borderRadius: 4,

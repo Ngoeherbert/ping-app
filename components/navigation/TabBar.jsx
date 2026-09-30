@@ -7,14 +7,15 @@ import Icon from "../ui/Icon";
 import { palette } from "../../constants/colors";
 
 /**
- * Tabs in order: home, reels, create (center FAB), gists/messages, profile.
+ * Tabs in order: home, reels, pings, gists/messages, profile.
  * Used as `tabBar={(props) => <TabBar {...props} />}` in app/(tabs)/_layout.jsx
  * Hidden on deep gist thread routes: (tabs)/gists/[id]
+ * Hidden on deep profile routes: (tabs)/profile/[id]
  */
 const TABS = [
   { name: "index", label: "Home", icon: "home" },
   { name: "reels", label: "Reels", icon: "reels" },
-  { name: "create", label: "Create", icon: "plus", fab: true },
+  { name: "pings", label: "Pings", icon: "badgeCheck" },
   { name: "gists", label: "Gists", icon: "messages" },
   { name: "profile", label: "Profile", icon: "profile" },
 ];
@@ -67,7 +68,7 @@ export default function TabBar({ state, descriptors, navigation }) {
                 ]}
               >
                 <View style={[styles.fab, isFocused && styles.fabActive]}>
-                  <Icon name="plus" size={26} color="#FFFFFF" strokeWidth={2} />
+                  <Icon name="squarePlus" size={26} color="#FFFFFF" strokeWidth={2} />
                 </View>
                 <Text style={[styles.label, isFocused && styles.labelActive]}>
                   {tab.label}

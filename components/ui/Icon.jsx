@@ -68,6 +68,9 @@ import {
   LoaderCircleIcon,
   XIcon,
   BadgeCheckIcon,
+  DiscoverSquareIcon,
+  AddSquareIcon,
+  SquarePlusIcon,
   PictureInPicture01Icon,
   PictureInPictureExitIcon,
   SparklesIcon,
@@ -184,6 +187,9 @@ const icons = {
   spinner: LoaderCircleIcon,
   x: XIcon,
   badgeCheck: BadgeCheckIcon,
+  discover: DiscoverSquareIcon,
+  addSquare: AddSquareIcon,
+  squarePlus: SquarePlusIcon,
 
   // filter icons
   none: CircleSlashIcon,
