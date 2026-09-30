@@ -11,7 +11,7 @@ import LikeModal from "../../components/ping/LikeModal";
 import { useFeed } from "../../hooks/useFeed";
 import { useStoriesData } from "../../hooks/useStoriesData";
 
-function HomeHeader({ onDiscover, onNotifications }) {
+function HomeHeader({ onDiscover, onCreateSquare, onNotifications }) {
   return (
     <View style={styles.header}>
       <Text style={styles.logo}>Ping</Text>
@@ -21,6 +21,14 @@ function HomeHeader({ onDiscover, onNotifications }) {
           accessibilityRole="button"
           accessibilityLabel="Discover"
           onPress={onDiscover}
+        >
+          <Icon name="discover" size={24} color={palette.ink} />
+        </Pressable>
+        <Pressable
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Square Plus"
+          onPress={onCreateSquare}
         >
           <Icon name="squarePlus" size={24} color={palette.ink} />
         </Pressable>
@@ -74,7 +82,8 @@ export default function HomeScreen() {
   return (
     <PhoneScreen padded={false}>
       <HomeHeader
-        onDiscover={() => router.push("/(tabs)/discover")}
+        onDiscover={() => router.push("/discover")}
+        onCreateSquare={() => {}}
         onNotifications={() => {}}
       />
 
