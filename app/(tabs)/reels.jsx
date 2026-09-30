@@ -100,25 +100,28 @@ function ReelCommentsSheet({ sheetRef, reel, onClose }) {
       onClose={onClose}
       showCloseButton
       footer={
-        <View style={styles.commentInputRow}>
+         <View style={styles.commentInputRow}>
           <Avatar uri="https://picsum.photos/seed/me/120/120" name="You" size={32} />
-          <TextInput
-            style={styles.commentInput}
-            placeholder="Add a comment..."
-            placeholderTextColor={palette.muted}
-            value={text}
-            onChangeText={setText}
-            onSubmitEditing={submit}
-            returnKeyType="send"
-            blurOnSubmit={false}
-          />
+          <View style={styles.commentInputContainer}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Add a comment..."
+              placeholderTextColor={palette.muted}
+              value={text}
+              onChangeText={setText}
+              onSubmitEditing={submit}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              multiline
+            />
+          </View>
           <Pressable
             onPress={submit}
             style={[styles.commentSend, !text.trim() && styles.commentSendDisabled]}
             accessibilityRole="button"
             accessibilityLabel="Post comment"
           >
-            <Icon name="send" size={16} color="#FFFFFF" />
+            <Icon name="send" size={20} color="#FFFFFF" />
           </Pressable>
         </View>
       }
@@ -453,6 +456,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     paddingVertical: 10,
+    paddingHorizontal: 10,
   },
   commentBody: { flex: 1, minWidth: 0 },
   commentHead: { flexDirection: "row", alignItems: "center", gap: 5 },
@@ -477,24 +481,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 15,
     backgroundColor: palette.card,
+  },
+  commentInputContainer: {
+    flex: 1,
+    minHeight: 42,
+    maxHeight: 120,
+    borderRadius: 21,
+    backgroundColor: "#F2F2F2",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 13,
   },
   commentInput: {
     flex: 1,
-    height: 40,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    backgroundColor: palette.surface,
+    fontSize: 15,
     color: palette.ink,
-    fontSize: 14,
+    paddingVertical: 14,
+    minHeight: 42,
+    maxHeight: 110,
   },
   commentSend: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: palette.primary,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#111111",
     alignItems: "center",
     justifyContent: "center",
   },
