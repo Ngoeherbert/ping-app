@@ -12,6 +12,9 @@ const LIKE_PINK = "#F0407F";
 const RING_PINK = "#F2A7C6";
 const SEE_MORE_LIMIT = 90;
 
+// Posts carry the audience they were published to; older mocks default public.
+const AUDIENCE_ICONS = { public: "globe", friends: "users", private: "lock" };
+
 export function PostHeader({ post, onFollow, onMore, onProfilePress }) {
   const { user, avatar, verified, verifiedVariant, time, tagged, showFollow } = post;
 
@@ -47,7 +50,11 @@ export function PostHeader({ post, onFollow, onMore, onProfilePress }) {
         <View style={styles.timeRow}>
           <Text style={styles.time}>{time}</Text>
           <View style={styles.timeDivider} />
-          <Icon name="globe" size={13} color={palette.muted} />
+          <Icon
+            name={AUDIENCE_ICONS[post.audience] ?? "globe"}
+            size={13}
+            color={palette.muted}
+          />
         </View>
       </Pressable>
 

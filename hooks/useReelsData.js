@@ -19,5 +19,6 @@ export function useReelsData() {
     likeReel: getReelState().likeReel,
     saveReel: getReelState().saveReel,
     setCurrentIndex: getReelState().setCurrentIndex,
+    onCreateReel: getReelState().addReel,
   };
 }

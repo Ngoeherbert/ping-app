@@ -88,6 +88,7 @@ import {
   BlockedIcon,
   GlobalIcon,
   Share03Icon,
+  RepeatIcon,
 } from "@hugeicons/core-free-icons";
 
 const icons = {
@@ -104,6 +105,7 @@ const icons = {
   forward: LinkForwardIcon,
   reply: LinkBackwardIcon,
   share: Share03Icon,
+  repost: RepeatIcon,
   more: EllipsisIcon,
   close: Cancel01Icon,
 

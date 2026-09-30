@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
-import { View, Text, Pressable, TextInput, StyleSheet } from "react-native";
-import SlideUpModal from "../ui/SlideUpModal";
+import React, { useState, useCallback, forwardRef } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import Sheet from "../ui/CustomModalSheet";
 import Avatar from "../ui/Avatar";
 import Icon from "../ui/Icon";
 import VerifiedBadge from "../ui/VerifiedBadge";
@@ -21,14 +21,57 @@ const CommentModal = forwardRef(function CommentModal(
   }, [commentText, postId, onPostComment]);
 
   return (
-    <SlideUpModal
+    <Sheet
       ref={ref}
-      title="Comments"
+      title={`Comments${comments.length ? ` · ${comments.length}` : ""}`}
       onClose={onClose}
-      snapPoints={["50%", "75%"]}
       showCloseButton
+      footer={
+        <View style={styles.inputRow}>
+          <Avatar uri="https://picsum.photos/seed/me/120/120" name="You" size={32} />
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Add a comment..."
+              placeholderTextColor={palette.muted}
+              value={commentText}
+              onChangeText={setCommentText}
+              onSubmitEditing={handleSubmit}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              multiline
+            />
+          </View>
+          <Pressable
+            style={[styles.sendBtn, !commentText.trim() && styles.sendBtnDisabled]}
+            onPress={handleSubmit}
+            disabled={!commentText.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Send comment"
+          >
+            <Icon name="send" size={20} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      }
     >
-      {comments.map((comment) => {
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={[
+          styles.listContent,
+          comments.length === 0 && styles.listContentEmpty,
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+      {comments.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <View style={styles.empty}>
+            <Icon name="comment" size={44} color={palette.muted} />
+            <Text style={styles.emptyText}>No comments yet. Be the first to comment.</Text>
+          </View>
+        </View>
+      ) : (
+        comments.map((comment) => {
         const profile = getProfileById(comment.userId);
         const isVerified = profile?.verified || comment.verified;
         const verifiedVariant = profile?.verifiedVariant || comment.verifiedVariant || "blue";
@@ -61,35 +104,10 @@ const CommentModal = forwardRef(function CommentModal(
             </View>
           </View>
         );
-      })}
-
-      <View style={styles.inputRow}>
-        <Avatar uri="https://picsum.photos/seed/me/120/120" name="You" size={32} />
-        <TextInput
-          style={styles.commentInput}
-          placeholder="Add a comment..."
-          placeholderTextColor={palette.muted}
-          value={commentText}
-          onChangeText={setCommentText}
-          onSubmitEditing={handleSubmit}
-          returnKeyType="send"
-          blurOnSubmit={false}
-        />
-        <Pressable
-          style={[styles.sendBtn, !commentText.trim() && styles.sendBtnDisabled]}
-          onPress={handleSubmit}
-          disabled={!commentText.trim()}
-          accessibilityRole="button"
-          accessibilityLabel="Send comment"
-        >
-          <Icon
-            name="send"
-            size={20}
-            color={commentText.trim() ? palette.primary : palette.muted}
-          />
-        </Pressable>
-      </View>
-    </SlideUpModal>
+          })
+        )}
+      </ScrollView>
+    </Sheet>
   );
 });
 
@@ -125,6 +143,34 @@ function CommentReplies({ commentId }) {
 }
 
 const styles = StyleSheet.create({
+  list: {
+    flex: 1,
+    minHeight: 0,
+  },
+  listContent: {
+    paddingBottom: 16,
+  },
+  listContentEmpty: {
+    flexGrow: 1,
+  },
+  emptyWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 240,
+  },
+  empty: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    maxWidth: 260,
+  },
+  emptyText: {
+    fontSize: 15,
+    lineHeight: 21,
+    color: palette.muted,
+    textAlign: "center",
+  },
   commentContainer: {
     flexDirection: "row",
     paddingHorizontal: 4,
@@ -214,23 +260,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: palette.line,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: palette.card,
+  },
+  inputContainer: {
+    flex: 1,
+    minHeight: 42,
+    maxHeight: 120,
+    paddingHorizontal: 13,
+    borderRadius: 21,
+    backgroundColor: "#F2F2F2",
+    flexDirection: "row",
+    alignItems: "center",
   },
   commentInput: {
     flex: 1,
     fontSize: 15,
     color: palette.ink,
-    paddingVertical: 8,
+    paddingVertical: 14,
+    minHeight: 42,
+    maxHeight: 110,
   },
   sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#111111",
   },
   sendBtnDisabled: {
     opacity: 0.5,

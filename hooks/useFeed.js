@@ -20,5 +20,6 @@ export function useFeed() {
     refreshing,
     onEndReached,
     onRefresh,
+    onCreatePing: getPingState().postPing,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from "react";
+import React, { useCallback, useMemo, useState, useRef } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import PhoneScreen from "../../components/navigation/PhoneScreen";
@@ -10,8 +10,9 @@ import CommentModal from "../../components/ping/CommentModal";
 import LikeModal from "../../components/ping/LikeModal";
 import { useFeed } from "../../hooks/useFeed";
 import { useStoriesData } from "../../hooks/useStoriesData";
+import { useSocialData } from "../../hooks/useSocialData";
 
-function HomeHeader({ onDiscover, onCreateSquare, onNotifications }) {
+function HomeHeader({ onDiscover, onNotifications, unreadCount = 0 }) {
   return (
     <View style={styles.header}>
       <Text style={styles.logo}>Ping</Text>
@@ -27,19 +28,17 @@ function HomeHeader({ onDiscover, onCreateSquare, onNotifications }) {
         <Pressable
           style={styles.iconBtn}
           accessibilityRole="button"
-          accessibilityLabel="Square Plus"
-          onPress={onCreateSquare}
-        >
-          <Icon name="squarePlus" size={24} color={palette.ink} />
-        </Pressable>
-        <Pressable
-          style={styles.iconBtn}
-          accessibilityRole="button"
           accessibilityLabel="Notifications"
           onPress={onNotifications}
         >
           <Icon name="notifications" size={22} color={palette.ink} />
-          <View style={styles.badge} />
+          {unreadCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </Text>
+            </View>
+          )}
         </Pressable>
       </View>
     </View>
@@ -49,7 +48,12 @@ function HomeHeader({ onDiscover, onCreateSquare, onNotifications }) {
 export default function HomeScreen() {
   const router = useRouter();
   const { pings, loadingMore, refreshing, onEndReached, onRefresh } = useFeed();
-  const { stories, myProfile, onOpenStory, onStartStory } = useStoriesData();
+  const { stories, myProfile, onOpenStory } = useStoriesData();
+  const { notifications } = useSocialData();
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
 
   const commentModalRef = useRef(null);
   const likeModalRef = useRef(null);
@@ -79,12 +83,18 @@ export default function HomeScreen() {
     }, 50);
   }, []);
 
+  // Story creation lives in the Create tab, so the story row hands off to it.
+  const handleStartStory = useCallback(
+    () => router.navigate({ pathname: "/create", params: { mode: "story" } }),
+    [router]
+  );
+
   return (
     <PhoneScreen padded={false}>
       <HomeHeader
+        unreadCount={unreadCount}
         onDiscover={() => router.push("/discover")}
-        onCreateSquare={() => {}}
-        onNotifications={() => {}}
+        onNotifications={() => router.push("/notifications")}
       />
 
       <ScrollView
@@ -106,7 +116,7 @@ export default function HomeScreen() {
         <StoriesRow
           myAvatar={myProfile?.avatar}
           stories={stories}
-          onStartStory={onStartStory}
+          onStartStory={handleStartStory}
           onOpenStory={onOpenStory}
         />
         {pings.map((p) => (
@@ -157,13 +167,17 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: "absolute",
-    top: 10,
-    right: 12,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
     backgroundColor: palette.danger,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  badgeText: { fontSize: 10, fontWeight: "800", color: "#FFFFFF" },
 
   feed: {
     paddingHorizontal: 12,

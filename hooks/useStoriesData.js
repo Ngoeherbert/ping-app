@@ -1,4 +1,10 @@
-import { useStories, useMyProfile, openStory, startStory } from "../lib/stores/storyStore";
+import {
+  useStories,
+  useMyProfile,
+  openStory,
+  startStory,
+  createStory,
+} from "../lib/stores/storyStore";
 
 export function useStoriesData() {
   const stories = useStories();
@@ -9,5 +15,6 @@ export function useStoriesData() {
     myProfile,
     onOpenStory: openStory,
     onStartStory: startStory,
+    onCreateStory: createStory,
   };
 }

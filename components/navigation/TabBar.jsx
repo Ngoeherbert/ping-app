@@ -7,7 +7,8 @@ import Icon from "../ui/Icon";
 import { palette } from "../../constants/colors";
 
 /**
- * Tabs in order: home, reels, pings, gists/messages, profile.
+ * Tabs in order: home, reels, create, gists/messages, profile.
+ * `create` is the raised action tab (rendered from `tab.fab`).
  * Used as `tabBar={(props) => <TabBar {...props} />}` in app/(tabs)/_layout.jsx
  * Hidden on deep gist thread routes: (tabs)/gists/[id]
  * Hidden on deep profile routes: (tabs)/profile/[id]
@@ -15,7 +16,7 @@ import { palette } from "../../constants/colors";
 const TABS = [
   { name: "index", label: "Home", icon: "home" },
   { name: "reels", label: "Reels", icon: "reels" },
-  { name: "pings", label: "Pings", icon: "badgeCheck" },
+  { name: "create", label: "Create", icon: "squarePlus", fab: true },
   { name: "gists", label: "Gists", icon: "messages" },
   { name: "profile", label: "Profile", icon: "profile" },
 ];

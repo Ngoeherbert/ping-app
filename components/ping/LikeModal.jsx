@@ -1,6 +1,6 @@
 import React, { forwardRef } from "react";
-import { View, Text, StyleSheet } from "react-native";
-import SlideUpModal from "../ui/SlideUpModal";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
+import CustomSheet from "../ui/CustomModalSheet";
 import Avatar from "../ui/Avatar";
 import Icon from "../ui/Icon";
 import VerifiedBadge from "../ui/VerifiedBadge";
@@ -14,20 +14,19 @@ const LikeModal = forwardRef(function LikeModal(
   const likes = postId ? getLikes(postId) : [];
 
   return (
-    <SlideUpModal
-      ref={ref}
-      title="Likes"
-      onClose={onClose}
-      snapPoints={["50%", "75%"]}
-      showCloseButton
-    >
+    <CustomSheet ref={ref} title="Likes" onClose={onClose} showCloseButton>
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      >
       {likes.length === 0 ? (
         <View style={styles.empty}>
           <Icon name="heart" size={48} color={palette.muted} />
           <Text style={styles.emptyText}>No likes yet</Text>
         </View>
       ) : (
-        <View style={styles.list}>
+        <View style={styles.listInner}>
           {likes.map((like) => {
             const profile = like.userId ? getProfileById(like.userId) : null;
             const name = like.user || profile?.name || "Unknown";
@@ -56,7 +55,8 @@ const LikeModal = forwardRef(function LikeModal(
           })}
         </View>
       )}
-    </SlideUpModal>
+      </ScrollView>
+    </CustomSheet>
   );
 });
 
@@ -74,6 +74,13 @@ const styles = StyleSheet.create({
     color: palette.muted,
   },
   list: {
+    flex: 1,
+    minHeight: 0,
+  },
+  listContent: {
+    paddingBottom: 16,
+  },
+  listInner: {
     gap: 4,
   },
   likeItem: {
