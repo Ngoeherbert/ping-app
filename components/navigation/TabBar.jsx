@@ -29,6 +29,10 @@ export default function TabBar({ state, descriptors, navigation }) {
   const inThread = segments[0] === "(tabs)" && segments[1] === "gists" && segments.length > 2;
   if (inThread) return null;
 
+  // TikTok-style create is a full-screen camera — it brings its own chrome.
+  const inCreate = segments[0] === "(tabs)" && segments[1] === "create";
+  if (inCreate) return null;
+
   return (
     <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       <View style={styles.bar}>

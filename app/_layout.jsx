@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import StoryViewer from "../components/stories/StoryViewer";
 
 export default function RootLayout() {
   return (
@@ -14,7 +15,12 @@ export default function RootLayout() {
             name="notifications"
             options={{ animation: "slide_from_right" }}
           />
+          <Stack.Screen
+            name="story-create"
+            options={{ animation: "slide_from_bottom" }}
+          />
         </Stack>
+        <StoryViewer />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

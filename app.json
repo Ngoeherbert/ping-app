@@ -31,6 +31,13 @@
       "expo-font",
       "expo-video",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Ping to use your camera to shoot photos and videos.",
+          "microphonePermission": "Allow Ping to use your microphone to record video sound."
+        }
+      ],
+      [
         "expo-audio",
         {
           "microphonePermission": "Allow Ping to use your microphone to record voice notes."

@@ -1,14 +1,27 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Image } from "react-native";
 import Avatar from "../ui/Avatar";
+import Icon from "../ui/Icon";
 import { palette } from "../../constants/colors";
 import { radius } from "../../constants/radius";
 import { shadows } from "../../constants/shadows";
+import { USER_PROFILES, MY_USER_ID, MY_PROFILE } from "../../lib/mockData";
+import { storyKind } from "../../lib/stores/storyStore";
 
 const TAG_BLUE = "#2F80ED";
 const LIKE_PINK = "#F0407F";
 
 export function StoryTile({ story, onPress }) {
+  const kind = storyKind(story);
+  const [imgErr, setImgErr] = useState(false);
+  const remote = typeof story.cover === "string" && /^https?:\/\//i.test(story.cover);
+  // Only image stories (plus stories with a real remote thumbnail) show a photo;
+  // every other kind gets a type-styled fallback instead of a blank tile.
+  const cover =
+    !imgErr && (kind === "image" || (kind === "video" && remote))
+      ? story.cover
+      : null;
+  const icon = kind === "video" ? "play" : kind === "link" ? "link" : kind === "audio" ? "mic" : "image";
   return (
     <Pressable
       onPress={onPress}
@@ -16,7 +29,28 @@ export function StoryTile({ story, onPress }) {
       accessibilityRole="button"
       accessibilityLabel="Open story"
     >
-      <Image source={{ uri: story.cover }} style={styles.storyCover} resizeMode="cover" />
+      {cover ? (
+        <Image
+          source={{ uri: cover }}
+          style={styles.storyCover}
+          resizeMode="cover"
+          onError={() => setImgErr(true)}
+        />
+      ) : (
+        <View
+          style={[
+            styles.storyCover,
+            styles.coverFallback,
+            kind === "text" && { backgroundColor: story.bg ?? "#111B21" },
+          ]}
+        >
+          {kind === "text" ? (
+            <Text style={[styles.coverGlyph, { color: story.textColor ?? "#FFFFFF" }]}>Aa</Text>
+          ) : (
+            <Icon name={icon} size={30} color="#00A884" />
+          )}
+        </View>
+      )}
       <View style={[styles.storyRing, story.seen && styles.storyRingSeen]}>
         <Image source={{ uri: story.avatar }} style={styles.storyAvatar} />
       </View>
@@ -44,7 +78,39 @@ export function CreateStoryCard({ avatar, onPress }) {
   );
 }
 
+/**
+ * Groups the flat story list into one entry per user:
+ *   { userId, username, avatar, stories: [...] }
+ * The viewer receives only the selected group's stories.
+ */
+export function groupStoriesByUser(stories) {
+  const groups = [];
+  const byUser = new Map();
+  for (const s of stories ?? []) {
+    if (!s) continue;
+    const key = String(s.userId ?? "unknown");
+    let g = byUser.get(key);
+    if (!g) {
+      g = { userId: key, username: null, avatar: null, stories: [] };
+      byUser.set(key, g);
+      groups.push(g);
+    }
+    g.stories.push(s);
+    if (!g.avatar && s.avatar) g.avatar = s.avatar;
+  }
+  for (const g of groups) {
+    const first = g.stories[0];
+    const profile =
+      first.userId === MY_USER_ID || first.mine
+        ? MY_PROFILE
+        : USER_PROFILES[String(first.userId)];
+    g.username = first.name ?? profile?.name ?? "Unknown";
+  }
+  return groups;
+}
+
 export default function StoriesRow({ myAvatar, stories, onStartStory, onOpenStory }) {
+  const groups = useMemo(() => groupStoriesByUser(stories), [stories]);
   return (
     <ScrollView
       horizontal
@@ -53,13 +119,18 @@ export default function StoriesRow({ myAvatar, stories, onStartStory, onOpenStor
       contentContainerStyle={styles.stories}
     >
       <CreateStoryCard avatar={myAvatar} onPress={onStartStory} />
-      {stories.map((s) => (
-        <StoryTile
-          key={s.id}
-          story={s}
-          onPress={() => onOpenStory && onOpenStory(s)}
-        />
-      ))}
+      {groups.map((g) => {
+        // Start this user's session on their first unseen story (or latest).
+        const primary = g.stories.find((x) => !x.seen) ?? g.stories[0];
+        const allSeen = g.stories.every((x) => x.seen);
+        return (
+          <StoryTile
+            key={g.userId}
+            story={{ ...primary, seen: allSeen }}
+            onPress={() => onOpenStory && onOpenStory(primary)}
+          />
+        );
+      })}
     </ScrollView>
   );
 }
@@ -113,6 +184,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: palette.line,
   },
+  coverFallback: { backgroundColor: "#111B21", alignItems: "center", justifyContent: "center" },
+  coverGlyph: { fontSize: 34, fontWeight: "800" },
   storyCover: { ...StyleSheet.absoluteFillObject },
   storyRing: {
     position: "absolute",

@@ -83,9 +83,9 @@ export default function HomeScreen() {
     }, 50);
   }, []);
 
-  // Story creation lives in the Create tab, so the story row hands off to it.
+  // Dedicated fullscreen story composer.
   const handleStartStory = useCallback(
-    () => router.navigate({ pathname: "/create", params: { mode: "story" } }),
+    () => router.navigate("/story-create"),
     [router]
   );
 
