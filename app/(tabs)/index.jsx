@@ -83,9 +83,16 @@ export default function HomeScreen() {
     }, 50);
   }, []);
 
-  // Dedicated fullscreen story composer.
+   // Dedicated fullscreen story composer.
   const handleStartStory = useCallback(
     () => router.navigate("/story-create"),
+    [router]
+  );
+
+  // "My story" card: open the management screen where the user can view,
+  // delete, update and add to their own stories.
+  const handleOpenMyStory = useCallback(
+    () => router.navigate("/my-stories"),
     [router]
   );
 
@@ -118,6 +125,7 @@ export default function HomeScreen() {
           stories={stories}
           onStartStory={handleStartStory}
           onOpenStory={onOpenStory}
+          onOpenMyStory={handleOpenMyStory}
         />
         {pings.map((p) => (
           <PostCard

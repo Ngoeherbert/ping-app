@@ -109,8 +109,10 @@ export function groupStoriesByUser(stories) {
   return groups;
 }
 
-export default function StoriesRow({ myAvatar, stories, onStartStory, onOpenStory }) {
+export default function StoriesRow({ myAvatar, stories, onStartStory, onOpenStory, onOpenMyStory }) {
   const groups = useMemo(() => groupStoriesByUser(stories), [stories]);
+  const myStories = useMemo(() => stories.filter((s) => s.userId === MY_USER_ID), [stories]);
+  const hasMyStories = myStories.length > 0;
   return (
     <ScrollView
       horizontal
@@ -118,8 +120,11 @@ export default function StoriesRow({ myAvatar, stories, onStartStory, onOpenStor
       style={styles.storiesScroll}
       contentContainerStyle={styles.stories}
     >
-      <CreateStoryCard avatar={myAvatar} onPress={onStartStory} />
+      {!hasMyStories ? (
+        <CreateStoryCard avatar={myAvatar} onPress={onStartStory} />
+      ) : null}
       {groups.map((g) => {
+        const isMine = g.stories.every((s) => s.userId === MY_USER_ID) && g.stories.length > 0;
         // Start this user's session on their first unseen story (or latest).
         const primary = g.stories.find((x) => !x.seen) ?? g.stories[0];
         const allSeen = g.stories.every((x) => x.seen);
@@ -127,7 +132,10 @@ export default function StoriesRow({ myAvatar, stories, onStartStory, onOpenStor
           <StoryTile
             key={g.userId}
             story={{ ...primary, seen: allSeen }}
-            onPress={() => onOpenStory && onOpenStory(primary)}
+            onPress={() => {
+              if (isMine && onOpenMyStory) onOpenMyStory();
+              else if (onOpenStory && !isMine) onOpenStory(primary);
+            }}
           />
         );
       })}

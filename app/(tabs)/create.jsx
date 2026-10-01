@@ -486,7 +486,7 @@ export default function CreateScreen() {
     try {
       if (mode === "story") {
         onCreateStory({ cover: media.poster || media.uri });
-        router.navigate("/");
+        router.navigate("/my-stories");
       } else if (mode === "ping" || mode === "text") {
         onCreatePing({
           id: `ping-me-${stamp}`,

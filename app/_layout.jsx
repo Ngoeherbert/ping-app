@@ -16,6 +16,10 @@ export default function RootLayout() {
             options={{ animation: "slide_from_right" }}
           />
           <Stack.Screen
+            name="my-stories"
+            options={{ animation: "slide_from_right" }}
+          />
+          <Stack.Screen
             name="story-create"
             options={{ animation: "slide_from_bottom" }}
           />

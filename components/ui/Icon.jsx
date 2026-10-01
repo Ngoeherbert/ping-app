@@ -66,6 +66,7 @@ import {
   AiAudioIcon,
   EllipsisIcon,
   InfoIcon,
+  EyeIcon,
   Group01Icon,
   LoaderCircleIcon,
   XIcon,
@@ -155,7 +156,8 @@ const icons = {
   clock: Clock01Icon,
   timer: Timer01Icon,
 
-  info: InfoIcon,
+   info: InfoIcon,
+  eye: EyeIcon,
   group: Group01Icon,
   globe: GlobalIcon,
   cameraFlashOn: FlashIcon,

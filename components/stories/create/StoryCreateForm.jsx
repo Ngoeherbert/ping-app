@@ -84,7 +84,7 @@ export default function StoryCreateForm() {
 
   const goView = useCallback(() => {
     setStatusBarStyle("dark");
-    router.navigate("/");
+    router.navigate("/my-stories");
   }, [router]);
 
   const onAudioDone = useCallback(
