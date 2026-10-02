@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Image } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import Avatar from "../ui/Avatar";
 import Icon from "../ui/Icon";
 import { palette } from "../../constants/colors";
@@ -7,27 +8,106 @@ import { radius } from "../../constants/radius";
 import { shadows } from "../../constants/shadows";
 import { USER_PROFILES, MY_USER_ID, MY_PROFILE } from "../../lib/mockData";
 import { storyKind } from "../../lib/stores/storyStore";
+import { TEXT_FONTS, fmtDur, linkDomain } from "./create/constants";
 
 const TAG_BLUE = "#2F80ED";
 const LIKE_PINK = "#F0407F";
 
-export function StoryTile({ story, onPress }) {
+/**
+ * Content preview for stories that have no photo: real text, a link card, or
+ * voice-note details — so an uploaded story reads as itself in the row instead
+ * of collapsing to a generic type icon.
+ */
+function StoryKindPreview({ story }) {
+  const kind = storyKind(story);
+
+  if (kind === "text") {
+    const body = String(story.text ?? story.caption ?? "").trim();
+    const weight = TEXT_FONTS.find((f) => f.key === story.font)?.weight ?? "700";
+    return (
+      <View style={[styles.storyCover, styles.coverFallback, { backgroundColor: story.bg ?? "#111B21" }]}>
+        {body ? (
+          <Text
+            style={[styles.previewText, { color: story.textColor ?? "#FFFFFF", fontWeight: weight }]}
+            numberOfLines={4}
+          >
+            {body}
+          </Text>
+        ) : (
+          <Icon name="edit" size={30} color="#00A884" />
+        )}
+      </View>
+    );
+  }
+
+  if (kind === "link") {
+    const url = story.url ?? story.link ?? null;
+    const valid = /^https?:\/\/\S+$/i.test(String(url ?? ""));
+    const domain = valid ? linkDomain(url) : "Link unavailable";
+    return (
+      <View style={[styles.storyCover, styles.coverFallback]}>
+        {story.thumbnail ? (
+          <Image source={{ uri: story.thumbnail }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : null}
+        <View style={[styles.previewOverlay, !!story.thumbnail && styles.previewOverlayDim]}>
+          <View style={styles.previewIcon}>
+            <Icon name="link" size={18} color="#00A884" />
+          </View>
+          <Text style={styles.previewTitle} numberOfLines={2}>
+            {story.title ?? domain}
+          </Text>
+          <Text style={styles.previewMeta} numberOfLines={1}>
+            {domain}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (kind === "audio") {
+    return (
+      <View style={[styles.storyCover, styles.coverFallback]}>
+        <View style={styles.previewOverlay}>
+          <View style={[styles.previewIcon, styles.previewIconLg]}>
+            <Icon name="mic" size={24} color="#00A884" />
+          </View>
+          <Text style={styles.previewTitle} numberOfLines={2}>
+            {story.title ?? "Voice note"}
+          </Text>
+          <Text style={styles.previewMeta}>
+            {story.duration ? fmtDur(story.duration) : "Voice"}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.storyCover, styles.coverFallback]}>
+      <Icon name="image" size={30} color="#00A884" />
+    </View>
+  );
+}
+
+export function StoryTile({ story, name, onPress }) {
   const kind = storyKind(story);
   const [imgErr, setImgErr] = useState(false);
   const remote = typeof story.cover === "string" && /^https?:\/\//i.test(story.cover);
   // Only image stories (plus stories with a real remote thumbnail) show a photo;
-  // every other kind gets a type-styled fallback instead of a blank tile.
+  // every other kind renders its own content preview instead.
   const cover =
     !imgErr && (kind === "image" || (kind === "video" && remote))
       ? story.cover
       : null;
-  const icon = kind === "video" ? "play" : kind === "link" ? "link" : kind === "audio" ? "mic" : "image";
+  // `name` comes from the owning user's group so the tile can label itself even
+  // for seeded stories that carry no `name` of their own.
+  const label = name ?? story.name ?? "Story";
   return (
     <Pressable
       onPress={onPress}
       style={[styles.storyTile, { borderColor: story.seen ? "#D5D8DD" : LIKE_PINK, borderWidth: 0 }]}
       accessibilityRole="button"
-      accessibilityLabel="Open story"
+      accessibilityLabel={`Open ${label}'s story`}
     >
       {cover ? (
         <Image
@@ -37,22 +117,21 @@ export function StoryTile({ story, onPress }) {
           onError={() => setImgErr(true)}
         />
       ) : (
-        <View
-          style={[
-            styles.storyCover,
-            styles.coverFallback,
-            kind === "text" && { backgroundColor: story.bg ?? "#111B21" },
-          ]}
-        >
-          {kind === "text" ? (
-            <Text style={[styles.coverGlyph, { color: story.textColor ?? "#FFFFFF" }]}>Aa</Text>
-          ) : (
-            <Icon name={icon} size={30} color="#00A884" />
-          )}
-        </View>
+        <StoryKindPreview story={story} />
       )}
-      <View style={[styles.storyRing, story.seen && styles.storyRingSeen]}>
-        <Image source={{ uri: story.avatar }} style={styles.storyAvatar} />
+      {/* Scrim keeps the white name readable over any cover image. */}
+      <LinearGradient
+        colors={["transparent", "rgba(0,0,0,0.45)", "rgba(0,0,0,0.8)"]}
+        style={styles.storyScrim}
+        pointerEvents="none"
+      />
+      <View style={styles.storyFooter}>
+        <View style={[styles.storyRing, story.seen && styles.storyRingSeen]}>
+          <Image source={{ uri: story.avatar }} style={styles.storyAvatar} />
+        </View>
+        <Text style={styles.storyName} numberOfLines={1}>
+          {label}
+        </Text>
       </View>
     </Pressable>
   );
@@ -132,6 +211,7 @@ export default function StoriesRow({ myAvatar, stories, onStartStory, onOpenStor
           <StoryTile
             key={g.userId}
             story={{ ...primary, seen: allSeen }}
+            name={g.username}
             onPress={() => {
               if (isMine && onOpenMyStory) onOpenMyStory();
               else if (onOpenStory && !isMine) onOpenStory(primary);
@@ -192,21 +272,46 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: palette.line,
   },
-  coverFallback: { backgroundColor: "#111B21", alignItems: "center", justifyContent: "center" },
-  coverGlyph: { fontSize: 34, fontWeight: "800" },
+  // paddingBottom keeps the preview clear of the avatar/name footer below it.
+  coverFallback: { backgroundColor: "#111B21", alignItems: "center", justifyContent: "center", paddingBottom: 46, paddingHorizontal: 8 },
+  previewText: { textAlign: "center", fontSize: 15, lineHeight: 20 },
+  previewOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: 10, paddingBottom: 46 },
+  previewOverlayDim: { backgroundColor: "rgba(12,20,26,0.82)" },
+  previewIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,168,132,0.16)" },
+  previewIconLg: { width: 44, height: 44, borderRadius: 22 },
+  previewTitle: { color: "#FFFFFF", fontSize: 12, fontWeight: "700", textAlign: "center" },
+  previewMeta: { color: "#00A884", fontSize: 10, fontWeight: "700", textAlign: "center" },
   storyCover: { ...StyleSheet.absoluteFillObject },
-  storyRing: {
+  storyScrim: {
     position: "absolute",
-    top: 10,
-    left: 10,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 2,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 62,
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+  },
+  storyFooter: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
+  storyRing: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
     borderColor: LIKE_PINK,
-    padding: 2,
+    padding: 1.5,
     backgroundColor: palette.card,
   },
   storyRingSeen: { borderColor: "#D5D8DD" },
-  storyAvatar: { width: "100%", height: "100%", borderRadius: 21 },
+  storyAvatar: { width: "100%", height: "100%", borderRadius: 12 },
+  storyName: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: "600", color: "#FFFFFF" },
 });

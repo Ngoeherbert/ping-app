@@ -9,8 +9,11 @@ const LOAD_TIMEOUT = 15000;
  * Video story content. Autoplays when the story becomes active, pauses with
  * the viewer, reports playback position (for the viewer's progress bar) and
  * fires onFinish exactly once when the clip ends.
+ *
+ * `rate` > 1 fast-forwards playback (press-and-hold in the viewer) instead of
+ * freezing it, so holding never interrupts the clip.
  */
-export default function StoryVideoContent({ uri, paused, onProgress, onFinish }) {
+export default function StoryVideoContent({ uri, paused, rate = 1, onProgress, onFinish }) {
   const [phase, setPhase] = useState(uri ? "loading" : "error");
   const finishedRef = useRef(false);
   const player = useVideoPlayer(uri ? { uri, contentType: "progressive" } : null, (p) => {
@@ -77,6 +80,15 @@ export default function StoryVideoContent({ uri, paused, onProgress, onFinish })
       else if (phase === "ready" && !finishedRef.current) player.play();
     } catch {}
   }, [paused, phase, player]);
+
+  // Hold-to-fast-forward. Re-assert playback as well, since a clip that paused
+  // on the final frame must resume even though `paused` never changed.
+  useEffect(() => {
+    try {
+      player.playbackRate = rate;
+      if (rate > 1 && phase === "ready" && !finishedRef.current) player.play();
+    } catch {}
+  }, [rate, phase, player]);
 
   if (phase === "error") {
     return <StoryFallback icon="video" title="Video unavailable" sub="This video could not be played." />;

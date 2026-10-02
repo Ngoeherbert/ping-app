@@ -52,13 +52,14 @@ function TextContent({ story }) {
   );
 }
 
-export default function StoryContent({ story, kind, paused, author, onProgress, onFinish }) {
+export default function StoryContent({ story, kind, paused, rate, author, onProgress, onFinish }) {
   switch (kind) {
     case "video":
       return (
         <StoryVideoContent
           uri={story.videoUri ?? story.uri ?? null}
           paused={paused}
+          rate={rate}
           onProgress={onProgress}
           onFinish={onFinish}
         />

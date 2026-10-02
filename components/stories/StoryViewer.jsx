@@ -1,18 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Dimensions, Easing, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Animated, Alert, Dimensions, Easing, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import StoryContent from "./StoryContent";
+import StoryActivityModal from "./StoryActivityModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import * as MediaLibrary from "expo-media-library";
 import Avatar from "../ui/Avatar";
+import ActionSheet from "../ui/Modal";
 import Icon from "../ui/Icon";
 import VerifiedBadge from "../ui/VerifiedBadge";
 import { USER_PROFILES, MY_USER_ID, MY_PROFILE } from "../../lib/mockData";
-import { useActiveStoryIndex, useActiveUserId, useStories, closeStory, nextStory, nextUser, prevStory, prevUser, markSeen, storyKind, storyUserOrder, userNeighbor } from "../../lib/stores/storyStore";
+import { radius } from "../../constants/radius";
+import { useActiveStoryIndex, useActiveUserId, useStories, closeStory, nextStory, nextUser, prevStory, prevUser, markSeen, deleteStory, storyKind, storyUserOrder, storyViewsCount, userNeighbor } from "../../lib/stores/storyStore";
 
 const DURATION = 5000;
 const SCREEN_W = Dimensions.get("window").width;
 const SWIPE_ACTIVATE = 16; // px of horizontal drag before the user swipe takes over
 const SWIPE_COMMIT = 0.22; // fraction of the screen that commits the switch
+const BOOST_RATE = 2; // playback speed while holding a video story
+// Overlay text sits directly on the media, so it carries its own shadow as a
+// guarantee independent of how dark the frame behind it happens to be.
+const TEXT_SHADOW = {
+  textShadowColor: "rgba(0,0,0,0.7)",
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 4,
+};
 
 function authorOf(story) {
   if (!story) return { name: "?", avatar: null };
@@ -21,6 +35,61 @@ function authorOf(story) {
   const p = USER_PROFILES[String(story.userId)];
   if (!p) return { name: story.name ?? "Unknown", avatar: story.avatar ?? null, time: "2h" };
   return { name: p.name, handle: p.handle, avatar: story.avatar ?? p.avatar, verified: p.verified, variant: p.verifiedVariant, time: story.time ?? "2h" };
+}
+
+/**
+ * Caption overlay text. Text-kind stories render their body as the content
+ * itself, so media stories are the ones that need this drawn on top.
+ */
+function captionOf(story) {
+  return String(story?.caption ?? "").trim();
+}
+
+/** A story the signed-in user owns — drives the owner-only UI differences. */
+function isMineStory(story) {
+  return story?.userId === MY_USER_ID || !!story?.mine;
+}
+
+/**
+ * Your own story renders as a bottom-anchored column — caption, divider, then
+ * the view count. Because the stack is anchored to the BOTTOM edge, the caption
+ * is always laid out ABOVE the divider however many lines it wraps to. Someone
+ * else's story gets the caption alone, lifted clear of the reply bar. The count
+ * is a button that opens the activity list, so the caption ignores touches.
+ */
+function CaptionOverlay({ story, captionBottom, viewsBottom, onPressActivity }) {
+  const caption = captionOf(story);
+  const mine = isMineStory(story);
+  const views = storyViewsCount(story);
+  const bubble = caption ? (
+    <View style={styles.captionWrap} pointerEvents="none">
+      <Text style={styles.captionText} numberOfLines={3}>{caption}</Text>
+    </View>
+  ) : null;
+
+  if (mine) {
+    return (
+      <View style={[styles.captionStack, { bottom: viewsBottom }]}>
+        {bubble}
+        <View style={styles.overlayDivider} />
+        <Pressable
+          onPress={() => onPressActivity(story)}
+          hitSlop={8}
+          style={styles.viewsRow}
+          accessibilityRole="button"
+          accessibilityLabel={`${views} ${views === 1 ? "view" : "views"}, open activity`}
+        >
+          <Icon name="eye" size={14} color="rgba(255,255,255,0.9)" strokeWidth={1.8} />
+          <Text style={styles.viewsCountText}>
+            {views} {views === 1 ? "view" : "views"}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (!bubble) return null;
+  return <View style={[styles.captionStack, { bottom: captionBottom }]}>{bubble}</View>;
 }
 export default function StoryViewer() {
   const stories = useStories();
@@ -43,6 +112,9 @@ export default function StoryViewer() {
   const kind = story ? storyKind(story) : null;
   // image/text/link use the fixed 5s story timer; video/audio advance with playback.
   const timed = kind == null || kind === "image" || kind === "text" || kind === "link";
+  // Only video clips can be fast-forwarded; other kinds freeze on hold.
+  const isVideo = kind === "video";
+  const playRate = boosting && isVideo ? BOOST_RATE : 1;
   // Two-level navigation: stories within the current user, users within this order.
   const userOrder = useMemo(() => storyUserOrder(stories), [stories]);
   const canPrevUser = useMemo(() => {
@@ -51,6 +123,21 @@ export default function StoryViewer() {
     return ui > 0;
   }, [userOrder, activeUserId]);
   const author = useMemo(() => authorOf(story), [story]);
+  // Own stories differ from others': no reply bar, plus a view count.
+  const isMine = isMineStory(story);
+  // Caption is lifted clear of the bottom edge, high enough to also clear the
+  // reply bar that only other people's stories show.
+  const captionBottom = Math.max(insets.bottom, 10) + 76;
+  // The view count sits low in the bottom-left corner, under the caption.
+  const viewsBottom = Math.max(insets.bottom, 10) + 16;
+  // Edge scrims keep the header and bottom bar legible over any frame. Both sit
+  // flush against the screen edges so they cover the safe-area insets as well,
+  // and each extends past the chrome it sits behind.
+  const topScrimHeight = Math.max(insets.top, 8) + 84;
+  const bottomScrimHeight = Math.max(insets.bottom, 10) + 168;
+  // Only photo/video frames need the edge scrims. Text, voice and link stories
+  // render on their own opaque surfaces, where the scrim just muddies them.
+  const wantsScrim = kind === "image" || kind === "video";
   const progress = useRef(new Animated.Value(0)).current;
   const anim = useRef(null);
   const startRef = useRef(0);
@@ -68,6 +155,10 @@ export default function StoryViewer() {
   const bounceRef = useRef(null);
   const pauseRef = useRef(null);
   const [paused, setPaused] = useState(false);
+  // Hold-to-fast-forward on video stories. Kept in a ref too so the press-out
+  // handler can read it without depending on the render that started the hold.
+  const boostingRef = useRef(false);
+  const [boosting, setBoosting] = useState(false);
   const [reply, setReply] = useState("");
   const [liked, setLiked] = useState(false);
   const pausedRef = useRef(false);
@@ -100,6 +191,8 @@ export default function StoryViewer() {
     setReply("");
     setLiked(false);
     setPaused(false);
+    setBoosting(false);
+    boostingRef.current = false;
     elapsedRef.current = 0;
     finishedRef.current = null;
     if (story?.id) markSeen(story.id);
@@ -131,6 +224,20 @@ export default function StoryViewer() {
     if (!timed) return; // media-driven types resume through their `paused` prop
     startAnim(Math.min(elapsedRef.current / DURATION, 0.999));
   }, [startAnim, timed]);
+  // Press-and-hold. Video stories fast-forward instead of pausing; everything
+  // else falls back to the original pause behaviour.
+  const hold = useCallback(() => {
+    if (!isVideo) return pause();
+    boostingRef.current = true;
+    setBoosting(true);
+  }, [isVideo, pause]);
+  const holdEnd = useCallback(() => {
+    if (boostingRef.current) {
+      boostingRef.current = false;
+      setBoosting(false);
+    }
+    if (paused && !stageRef.current) resume();
+  }, [paused, resume]);
   const goNext = useCallback(() => {
     if (stageRef.current) return; // a user swipe is running; ignore taps until it settles
     Haptics.selectionAsync().catch(() => {});
@@ -247,8 +354,67 @@ export default function StoryViewer() {
   const handleClose = useCallback(() => {
     anim.current?.stop();
     setPaused(false);
+    setBoosting(false);
+    boostingRef.current = false;
     closeStory();
   }, []);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const [activityStory, setActivityStory] = useState(null);
+  // The activity sheet is owner-only: it's the audience for your own story.
+  const openActivity = useCallback((target) => {
+    if (!isMineStory(target)) return;
+    setActivityStory(target);
+  }, []);
+  const forwardStory = useCallback(() => {
+    setMenuOpen(false);
+    Clipboard.setStringAsync(`ping://story/${story?.id ?? ""}`).catch(() => {});
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, [story?.id]);
+  const saveStoryMedia = useCallback(async () => {
+    setMenuOpen(false);
+    const uri = story?.cover ?? story?.uri;
+    if (!uri) {
+      Alert.alert("Nothing to save", "This story has no media to download.");
+      return;
+    }
+    try {
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch {
+      Alert.alert("Couldn't save", "Allow photo access in Settings to save this story.");
+    }
+  }, [story]);
+  const reportStory = useCallback(() => {
+    setMenuOpen(false);
+    Alert.alert("Report story", `Report this story from @${author.handle?.replace("@", "") ?? "user"}? Our team will review it.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Report",
+        style: "destructive",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          Alert.alert("Thanks", "We\u2019ve received your report.");
+        },
+      },
+    ]);
+  }, [author.handle]);
+  const removeStory = useCallback(() => {
+    setMenuOpen(false);
+    if (!story) return;
+    Alert.alert("Delete story", "This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          deleteStory(story.id);
+          closeStory();
+        },
+      },
+    ]);
+  }, [story]);
   if (!visible || !story) return null;
   return (
     <Modal visible={visible} animationType="fade" statusBarTranslucent presentationStyle="fullScreen" onRequestClose={handleClose}>
@@ -267,6 +433,7 @@ export default function StoryViewer() {
                 story={l.story}
                 kind={l.kind}
                 paused={l.paused}
+                rate={playRate}
                 author={authorOf(l.story)}
                 onProgress={l.role === "outgoing" ? undefined : onMediaProgress}
                 onFinish={l.role === "outgoing" ? undefined : onMediaEnd}
@@ -274,11 +441,32 @@ export default function StoryViewer() {
             </Animated.View>
           ))}
         </View>
-        <View style={styles.topScrim} pointerEvents="none" />
-        <View style={styles.bottomScrim} pointerEvents="none" />
+        {/* Edge scrims sit under the chrome but over the media, so header and
+            bottom-bar text stay readable on any frame. pointerEvents keeps them
+            from swallowing the tap zones below. Omitted for kinds that are
+            already opaque. */}
+        {wantsScrim ? (
+          <>
+            <LinearGradient
+              // `locations` holds the strong opacity across the whole chrome band
+              // and only fades past its inner edge — a plain fade left the header
+              // row (which sits at the BOTTOM of this scrim) almost uncovered.
+              colors={["rgba(0,0,0,0.78)", "rgba(0,0,0,0.72)", "rgba(0,0,0,0)"]}
+              locations={[0, 0.8, 1]}
+              style={[styles.edgeScrim, { top: 0, height: topScrimHeight }]}
+              pointerEvents="none"
+            />
+            <LinearGradient
+              colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.72)", "rgba(0,0,0,0.88)"]}
+              locations={[0, 0.24, 1]}
+              style={[styles.edgeScrim, { bottom: 0, height: bottomScrimHeight }]}
+              pointerEvents="none"
+            />
+          </>
+        ) : null}
         <View style={styles.tapRow} {...pan.panHandlers}>
-          <Pressable style={styles.tapLeft} onPress={goPrev} onLongPress={pause} onPressOut={() => paused && !stageRef.current && resume()} delayLongPress={220} accessibilityRole="button" accessibilityLabel="Previous story" />
-          <Pressable style={styles.tapRight} onPress={goNext} onLongPress={pause} onPressOut={() => paused && !stageRef.current && resume()} delayLongPress={220} accessibilityRole="button" accessibilityLabel="Next story" />
+          <Pressable style={styles.tapLeft} onPress={goPrev} onLongPress={hold} onPressOut={holdEnd} delayLongPress={220} accessibilityRole="button" accessibilityLabel="Previous story" />
+          <Pressable style={styles.tapRight} onPress={goNext} onLongPress={hold} onPressOut={holdEnd} delayLongPress={220} accessibilityRole="button" accessibilityLabel="Next story" />
         </View>
         <View style={[styles.chrome, { paddingTop: Math.max(insets.top, 8) + 6 }]}>
           <View style={styles.progressRow}>
@@ -291,6 +479,9 @@ export default function StoryViewer() {
             ))}
           </View>
           <View style={styles.authorRow}>
+            <Pressable onPress={handleClose} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Close story viewer">
+              <Icon name="back" size={24} color="#FFFFFF" />
+            </Pressable>
             <Avatar uri={author.avatar} name={author.name} size={36} />
             <View style={styles.authorText}>
               <View style={styles.nameRow}>
@@ -300,28 +491,77 @@ export default function StoryViewer() {
               </View>
               {!!author.handle && <Text style={styles.handle} numberOfLines={1}>{author.handle}</Text>}
             </View>
-            <Pressable onPress={handleClose} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Close story viewer">
-              <Icon name="close" size={24} color="#FFFFFF" />
+            <Pressable
+              onPress={() => { Haptics.selectionAsync().catch(() => {}); setMenuOpen(true); }}
+              hitSlop={10}
+              style={styles.iconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="More options"
+            >
+              <Icon name="more" size={22} color="#FFFFFF" />
             </Pressable>
           </View>
         </View>
-        <View style={[styles.replyBar, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]}>
-          <View style={styles.inputWrap}>
-            <TextInput value={reply} onChangeText={setReply} placeholder="Reply..." placeholderTextColor="rgba(255,255,255,0.7)" style={styles.input} onFocus={pause} onBlur={resume} returnKeyType="send" onSubmitEditing={() => { if (!reply.trim()) return; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setReply(""); }} />
+        {/* Owners can't reply to or react to their own story, so the bar is
+            omitted; holding a video swaps the composer for a fast-forward cue. */}
+        {isMine ? null : boosting && isVideo ? (
+          <View style={[styles.boostBar, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]}>
+            <Icon name="forward" size={26} color="#FFFFFF" />
           </View>
-          <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setLiked((v) => !v); }} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={liked ? "Unlike story" : "Like story"}>
-            <Icon name="heart" size={26} color={liked ? "#F0407F" : "#FFFFFF"} />
-          </Pressable>
-          <Pressable onPress={() => { if (reply.trim()) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setReply(""); } }} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Send reply">
-            <Icon name="send" size={24} color="#FFFFFF" />
-          </Pressable>
-        </View>
-        {paused ? (
-          <View style={styles.paused} pointerEvents="none">
-            <Icon name="pause" size={14} color="#FFFFFF" />
-            <Text style={styles.pausedText}>Paused</Text>
+        ) : (
+          <View style={[styles.replyBar, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]}>
+            <View style={styles.inputWrap}>
+              <TextInput value={reply} onChangeText={setReply} placeholder="Reply..." placeholderTextColor="rgba(255,255,255,0.7)" style={styles.input} onFocus={pause} onBlur={resume} returnKeyType="send" onSubmitEditing={() => { if (!reply.trim()) return; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setReply(""); }} />
+            </View>
+            <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setLiked((v) => !v); }} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={liked ? "Unlike story" : "Like story"}>
+              <Icon name="heart" size={26} color={liked ? "#F0407F" : "#FFFFFF"} />
+            </Pressable>
+            <Pressable onPress={() => { if (reply.trim()) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setReply(""); } }} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Send reply">
+              <Icon name="send" size={24} color="#FFFFFF" />
+            </Pressable>
           </View>
-        ) : null}
+        )}
+        {/* Rendered ABOVE the tap zones so the eye stays tappable — the layer
+            content sits under tapRow, which covers the screen. Drawn once for
+            the active story instead of once per swipe layer. */}
+        <CaptionOverlay story={story} captionBottom={captionBottom} viewsBottom={viewsBottom} onPressActivity={openActivity} />
+        <ActionSheet visible={menuOpen} onRequestClose={closeMenu}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={closeMenu}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+          />
+          <View style={styles.menuCard}>
+            <View style={styles.menuHandle} />
+            <Pressable onPress={forwardStory} style={styles.menuRow} accessibilityRole="button" accessibilityLabel="Forward story">
+              <Icon name="share" size={20} color="#FFFFFF" />
+              <Text style={styles.menuText}>Forward</Text>
+            </Pressable>
+            {isMine ? (
+              <Pressable onPress={removeStory} style={styles.menuRow} accessibilityRole="button" accessibilityLabel="Delete story">
+                <Icon name="delete" size={20} color="#FF6B6B" />
+                <Text style={[styles.menuText, { color: "#FF6B6B" }]}>Delete</Text>
+              </Pressable>
+            ) : (
+              <>
+                <Pressable onPress={saveStoryMedia} style={styles.menuRow} accessibilityRole="button" accessibilityLabel="Save story">
+                  <Icon name="download" size={20} color="#FFFFFF" />
+                  <Text style={styles.menuText}>Save</Text>
+                </Pressable>
+                <Pressable onPress={reportStory} style={styles.menuRow} accessibilityRole="button" accessibilityLabel="Report story">
+                  <Icon name="flag" size={20} color="#FF6B6B" />
+                  <Text style={[styles.menuText, { color: "#FF6B6B" }]}>Report</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </ActionSheet>
+        <StoryActivityModal
+          visible={!!activityStory}
+          onClose={() => setActivityStory(null)}
+          story={activityStory}
+        />
       </View>
     </Modal>
   );
@@ -329,8 +569,7 @@ export default function StoryViewer() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000000" },
   contentClip: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
-  topScrim: { position: "absolute", top: 0, left: 0, right: 0, height: 180, backgroundColor: "rgba(0,0,0,0.35)" },
-  bottomScrim: { position: "absolute", bottom: 0, left: 0, right: 0, height: 160, backgroundColor: "rgba(0,0,0,0.35)" },
+  edgeScrim: { position: "absolute", left: 0, right: 0 },
   tapRow: { ...StyleSheet.absoluteFillObject, flexDirection: "row" },
   tapLeft: { width: "30%", height: "100%" },
   tapRight: { flex: 1, height: "100%" },
@@ -341,15 +580,25 @@ const styles = StyleSheet.create({
   authorRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   authorText: { flex: 1, minWidth: 0 },
   nameRow: { flexDirection: "row", alignItems: "center" },
-  name: { color: "#FFFFFF", fontSize: 15, fontWeight: "700", flexShrink: 1 },
-  time: { color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: "500", flexShrink: 0 },
-  handle: { color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 1 },
+  name: { color: "#FFFFFF", fontSize: 15, fontWeight: "700", flexShrink: 1, ...TEXT_SHADOW },
+  time: { color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: "500", flexShrink: 0, ...TEXT_SHADOW },
+  handle: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 1, ...TEXT_SHADOW },
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  captionStack: { position: "absolute", left: 16, right: 16, alignItems: "center" },
+  captionWrap: { alignSelf: "center", maxWidth: "100%", marginBottom: 20, backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9 },
+  captionText: { color: "#FFFFFF", fontSize: 14, lineHeight: 19, fontWeight: "500" },
+  overlayDivider: { alignSelf: "stretch", height: StyleSheet.hairlineWidth, backgroundColor: "rgba(255, 255, 255, 0.68)" },
+  // Padded with its own tint now that the story no longer has a bottom scrim.
+  viewsRow: { alignSelf: "flex-start", marginTop: 10, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.4)" },
+  viewsCountText: { color: "rgba(255,255,255,0.9)", fontSize: 12, fontWeight: "700" },
+  menuCard: { backgroundColor: "#1C1C22", borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: 8, paddingBottom: 28, paddingHorizontal: 8 },
+  menuHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.3)", alignSelf: "center", marginBottom: 8 },
+  menuRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, paddingHorizontal: 12 },
+  menuText: { fontSize: 15, fontWeight: "600", color: "#FFFFFF" },
+  boostBar: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 12, paddingTop: 8 },
   replyBar: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingTop: 8 },
   inputWrap: { flex: 1, minHeight: 44, borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.5)", paddingHorizontal: 16, justifyContent: "center" },
-  input: { color: "#FFFFFF", fontSize: 15, paddingVertical: 10 },
-  paused: { position: "absolute", top: "46%", alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.55)" },
-  pausedText: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
+  input: { color: "#FFFFFF", fontSize: 15, paddingVertical: 10, ...TEXT_SHADOW },
 });
 
 
