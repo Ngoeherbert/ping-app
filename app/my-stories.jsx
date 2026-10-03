@@ -3,9 +3,7 @@ import {
   Alert,
   FlatList,
   Image,
-  Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,17 +12,16 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { palette } from "../constants/colors";
 import { radius } from "../constants/radius";
-import Avatar from "../components/ui/Avatar";
 import Icon from "../components/ui/Icon";
-import VerifiedBadge from "../components/ui/VerifiedBadge";
 import Card from "../components/ui/Card";
 import ActionSheet from "../components/ui/Modal";
 import { useStoriesData } from "../hooks/useStoriesData";
-import { USER_PROFILES, MY_PROFILE, MY_USER_ID } from "../lib/mockData";
 import { storyKind } from "../lib/stores/storyStore";
+import StoryContentPreview from "../components/stories/StoryContentPreview";
 
 // Vertical chrome around the list card: the header bar plus the body's
 // top/bottom padding. Used to cap the list so it still scrolls when long.
@@ -32,18 +29,7 @@ const HEADER_HEIGHT = 46;
 const BODY_PADDING = 20;
 const MIN_LIST_HEIGHT = 280;
 
-function viewerOf(v) {
-  if (!v) return null;
-  if (v.userId === MY_USER_ID || v.mine) {
-    return { name: "You", handle: MY_PROFILE.handle, avatar: v.avatar ?? MY_PROFILE.avatar, verified: MY_PROFILE.verified, variant: MY_PROFILE.verifiedVariant, time: v.time ?? "now" };
-  }
-  const p = USER_PROFILES[String(v.userId)];
-  if (p) {
-    return { name: p.name, handle: p.handle, avatar: v.avatar ?? p.avatar, verified: p.verified, variant: p.verifiedVariant, time: v.time ?? "2h" };
-  }
-  return { name: v.name ?? "Someone", handle: v.handle ?? "", avatar: v.avatar ?? null, verified: false, variant: "blue", time: v.time ?? "now" };
-}
-
+/** Human-readable story type, used for accessibility labels. */
 function kindLabel(kind) {
   return kind === "video" ? "Video" : kind === "text" ? "Text" : kind === "link" ? "Link" : kind === "audio" ? "Audio" : "Photo";
 }
@@ -63,7 +49,8 @@ function StoryThumb({ story, size = 72, circular = false }) {
   const kind = storyKind(story);
   const remote = typeof story.cover === "string" && /^https?:\/\//i.test(story.cover);
   const cover = kind === "image" || (kind === "video" && remote) ? story.cover : null;
-  const icon = kind === "video" ? "play" : kind === "link" ? "link" : kind === "audio" ? "mic" : "image";
+  // No type badge: text/link/voice stories show their own content, and photo
+  // stories are self-evident, so the label was redundant noise.
   return (
     <View
       style={[
@@ -75,55 +62,9 @@ function StoryThumb({ story, size = 72, circular = false }) {
       {cover ? (
         <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       ) : (
-        <View style={[StyleSheet.absoluteFill, styles.thumbFallback, kind === "text" && { backgroundColor: story.bg ?? "#111B21" }]}>
-          {kind === "text" ? (
-            <Text style={[styles.coverGlyph, { color: story.textColor ?? "#FFFFFF" }]}>Aa</Text>
-          ) : (
-            <Icon name={icon} size={Math.round(size * 0.34)} color="#00A884" />
-          )}
-        </View>
+        <StoryContentPreview story={story} compact />
       )}
-      <View style={styles.kindBadge}>
-        <Text style={styles.kindBadgeText}>{kindLabel(kind)}</Text>
-      </View>
     </View>
-  );
-}
-
-function ViewersModal({ visible, onClose, story, viewers }) {
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.viewersSheet}>
-        <View style={styles.viewersHandle} />
-        <View style={styles.viewersHeader}>
-          <Text style={styles.viewersTitle} numberOfLines={1}>
-            {story?.caption?.trim() ? story.caption : kindLabel(storyKind(story))}
-          </Text>
-          <Text style={styles.viewersCount}>{viewers.length} {viewers.length === 1 ? "viewer" : "views"}</Text>
-          <Pressable onPress={onClose} hitSlop={10} style={styles.viewersClose} accessibilityRole="button" accessibilityLabel="Close viewers">
-            <Icon name="close" size={22} color={palette.ink} />
-          </Pressable>
-        </View>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.viewersList}>
-          {viewers.map((v) => {
-            const p = viewerOf(v);
-            return (
-              <View key={v.userId ?? v.time} style={styles.viewerRow}>
-                <Avatar uri={p.avatar} name={p.name} size={44} />
-                <View style={styles.viewerInfo}>
-                  <View style={styles.viewerNameRow}>
-                    <Text style={styles.viewerName} numberOfLines={1}>{p.name}</Text>
-                    {p.verified ? <VerifiedBadge variant={p.variant} size={15} inline style={{ marginLeft: 4 }} /> : null}
-                  </View>
-                  <Text style={styles.viewerHandle} numberOfLines={1}>{p.handle}</Text>
-                </View>
-                <Text style={styles.viewerTime}>{p.time}</Text>
-              </View>
-            );
-          })}
-        </ScrollView>
-      </View>
-    </Modal>
   );
 }
 
@@ -134,7 +75,6 @@ export default function MyStoriesScreen() {
   const { myStories, onOpenStory, onDeleteStory, onUpdateStory, storyViewsCount } = useStoriesData();
   const [editMode, setEditMode] = useState(false);
   const [drafts, setDrafts] = useState({});
-  const [viewersStory, setViewersStory] = useState(null);
   const [actionsStory, setActionsStory] = useState(null);
 
   // The card grows with its stories instead of stretching to fill the screen,
@@ -145,14 +85,6 @@ export default function MyStoriesScreen() {
   );
 
   const stories = useMemo(() => myStories ?? [], [myStories]);
-  const viewers = viewersStory?.views ?? [];
-
-  const openViewers = useCallback((story) => {
-    setActionsStory(null);
-    setViewersStory(story);
-  }, []);
-
-  const closeViewers = useCallback(() => setViewersStory(null), []);
 
   const openActions = useCallback((story) => {
     Haptics.selectionAsync().catch(() => {});
@@ -160,6 +92,14 @@ export default function MyStoriesScreen() {
   }, []);
 
   const closeActions = useCallback(() => setActionsStory(null), []);
+
+  // Same behaviour as the viewer's Forward: hand the story's link to the
+  // clipboard, ready to paste into a chat.
+  const forwardStory = useCallback(() => {
+    setActionsStory(null);
+    Clipboard.setStringAsync(`ping://story/${actionsStory?.id ?? ""}`).catch(() => {});
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, [actionsStory?.id]);
 
   const setDraftFor = useCallback((id, value) => {
     setDrafts((prev) => ({ ...prev, [id]: value }));
@@ -345,8 +285,6 @@ export default function MyStoriesScreen() {
         </Card>
       </View>
 
-      <ViewersModal visible={!!viewersStory} onClose={closeViewers} story={viewersStory} viewers={viewers} />
-
       <ActionSheet visible={!!actionsStory} onRequestClose={closeActions}>
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -358,26 +296,13 @@ export default function MyStoriesScreen() {
           <View style={styles.actionsHandle} />
           <Text style={styles.actionsTitle} numberOfLines={1}>{plainCaption(actionsStory)}</Text>
           <Pressable
-            onPress={() => openViewers(actionsStory)}
+            onPress={forwardStory}
             style={styles.actionRow}
             accessibilityRole="button"
-            accessibilityLabel="View viewers"
+            accessibilityLabel="Forward story"
           >
-            <Icon name="eye" size={20} color={palette.ink} />
-            <Text style={styles.actionRowText}>View viewers</Text>
-            <Text style={styles.actionRowMeta}>{storyViewsCount(actionsStory)}</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              setActionsStory(null);
-              setEditMode(true);
-            }}
-            style={styles.actionRow}
-            accessibilityRole="button"
-            accessibilityLabel="Edit caption"
-          >
-            <Icon name="edit" size={20} color={palette.ink} />
-            <Text style={styles.actionRowText}>Edit caption</Text>
+            <Icon name="forward" size={20} color={palette.ink} />
+            <Text style={styles.actionRowText}>Forward</Text>
           </Pressable>
           <Pressable
             onPress={() => deleteStory(actionsStory)}
@@ -386,7 +311,7 @@ export default function MyStoriesScreen() {
             accessibilityLabel="Delete story"
           >
             <Icon name="delete" size={20} color={palette.danger} />
-            <Text style={[styles.actionRowText, { color: palette.danger }]}>Delete story</Text>
+            <Text style={[styles.actionRowText, { color: palette.danger }]}>Delete</Text>
           </Pressable>
         </View>
       </ActionSheet>
@@ -427,10 +352,6 @@ const styles = StyleSheet.create({
   // "more" button is a sibling rather than a nested pressable.
   storyMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12 },
   thumb: { backgroundColor: palette.line, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  thumbFallback: { alignItems: "center", justifyContent: "center" },
-  coverGlyph: { fontSize: 22, fontWeight: "800" },
-  kindBadge: { position: "absolute", left: 2, bottom: 2, backgroundColor: "rgba(0,0,0,0.45)", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 999 },
-  kindBadgeText: { color: "#FFFFFF", fontSize: 9, fontWeight: "700" },
 
   storyInfo: { flex: 1, minWidth: 0, gap: 5 },
   storyTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -458,19 +379,4 @@ const styles = StyleSheet.create({
   actionsTitle: { fontSize: 15, fontWeight: "700", color: palette.ink, paddingHorizontal: 12, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line },
   actionRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, paddingHorizontal: 12 },
   actionRowText: { flex: 1, fontSize: 15, fontWeight: "600", color: palette.ink },
-  actionRowMeta: { fontSize: 14, color: palette.muted },
-
-  viewersSheet: { flex: 1, backgroundColor: palette.background, paddingHorizontal: 16 },
-  viewersHandle: { width: 32, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 8, marginBottom: 8 },
-  viewersHeader: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line },
-  viewersTitle: { fontSize: 17, fontWeight: "700", color: palette.ink, maxWidth: "70%" },
-  viewersCount: { fontSize: 14, color: palette.muted, marginTop: 4 },
-  viewersClose: { position: "absolute", right: 0, top: 6, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  viewersList: { paddingVertical: 8, gap: 6 },
-  viewerRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line },
-  viewerInfo: { flex: 1, minWidth: 0 },
-  viewerNameRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  viewerName: { fontSize: 14, fontWeight: "700", color: palette.ink },
-  viewerHandle: { fontSize: 12, color: palette.muted },
-  viewerTime: { fontSize: 12, color: palette.muted, textAlign: "right" },
 });

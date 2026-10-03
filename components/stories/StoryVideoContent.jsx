@@ -98,7 +98,9 @@ export default function StoryVideoContent({ uri, paused, rate = 1, onProgress, o
       <VideoView
         player={player}
         style={StyleSheet.absoluteFill}
-        contentFit="cover"
+        // "contain" fits the whole clip inside the frame rather than cropping it
+        // to fill, so nothing of the video is cut off at the edges.
+        contentFit="contain"
         nativeControls={false}
         allowsPictureInPicture={false}
       />

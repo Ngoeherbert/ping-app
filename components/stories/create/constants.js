@@ -30,3 +30,14 @@ export function linkDomain(url) {
     return url;
   }
 }
+
+/**
+ * First URL mentioned in free text, normalized. Lets a text story attach its
+ * link automatically as you type, instead of through a separate modal.
+ */
+export function findLink(raw) {
+  const text = String(raw ?? "");
+  const match =
+    text.match(/https?:\/\/\S+/i) ?? text.match(/\b(?:www\.)[\w-]+(?:\.[\w-]+)+[^\s]*/i);
+  return match ? normLink(match[0]) : null;
+}

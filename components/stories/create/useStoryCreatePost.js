@@ -1,7 +1,5 @@
 import { useCallback, useState } from "react";
-import { Alert } from "react-native";
 import * as Haptics from "expo-haptics";
-import { normLink } from "./constants";
 
 export function useStoryCreatePost({ onCreateStory, setPublished }) {
   const [posting, setPosting] = useState(false);
@@ -43,22 +41,5 @@ export function useStoryCreatePost({ onCreateStory, setPublished }) {
     [onCreateStory, posting, setPublished]
   );
 
-  const applyLink = useCallback(
-    ({ linkInput, setLink, setLinkInput, close }) => {
-      const url = normLink(linkInput);
-      if (!url) {
-        Alert.alert("Invalid link", "Enter a valid URL like example.com");
-        return;
-      }
-      setLink(url);
-      setLinkInput("");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      try {
-        close?.();
-      } catch {}
-    },
-    []
-  );
-
-  return { posting, doPost, applyLink };
+  return { posting, doPost };
 }

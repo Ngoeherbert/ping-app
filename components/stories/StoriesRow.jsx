@@ -2,92 +2,15 @@ import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Avatar from "../ui/Avatar";
-import Icon from "../ui/Icon";
 import { palette } from "../../constants/colors";
 import { radius } from "../../constants/radius";
 import { shadows } from "../../constants/shadows";
 import { USER_PROFILES, MY_USER_ID, MY_PROFILE } from "../../lib/mockData";
 import { storyKind } from "../../lib/stores/storyStore";
-import { TEXT_FONTS, fmtDur, linkDomain } from "./create/constants";
+import StoryContentPreview from "./StoryContentPreview";
 
 const TAG_BLUE = "#2F80ED";
 const LIKE_PINK = "#F0407F";
-
-/**
- * Content preview for stories that have no photo: real text, a link card, or
- * voice-note details — so an uploaded story reads as itself in the row instead
- * of collapsing to a generic type icon.
- */
-function StoryKindPreview({ story }) {
-  const kind = storyKind(story);
-
-  if (kind === "text") {
-    const body = String(story.text ?? story.caption ?? "").trim();
-    const weight = TEXT_FONTS.find((f) => f.key === story.font)?.weight ?? "700";
-    return (
-      <View style={[styles.storyCover, styles.coverFallback, { backgroundColor: story.bg ?? "#111B21" }]}>
-        {body ? (
-          <Text
-            style={[styles.previewText, { color: story.textColor ?? "#FFFFFF", fontWeight: weight }]}
-            numberOfLines={4}
-          >
-            {body}
-          </Text>
-        ) : (
-          <Icon name="edit" size={30} color="#00A884" />
-        )}
-      </View>
-    );
-  }
-
-  if (kind === "link") {
-    const url = story.url ?? story.link ?? null;
-    const valid = /^https?:\/\/\S+$/i.test(String(url ?? ""));
-    const domain = valid ? linkDomain(url) : "Link unavailable";
-    return (
-      <View style={[styles.storyCover, styles.coverFallback]}>
-        {story.thumbnail ? (
-          <Image source={{ uri: story.thumbnail }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        ) : null}
-        <View style={[styles.previewOverlay, !!story.thumbnail && styles.previewOverlayDim]}>
-          <View style={styles.previewIcon}>
-            <Icon name="link" size={18} color="#00A884" />
-          </View>
-          <Text style={styles.previewTitle} numberOfLines={2}>
-            {story.title ?? domain}
-          </Text>
-          <Text style={styles.previewMeta} numberOfLines={1}>
-            {domain}
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (kind === "audio") {
-    return (
-      <View style={[styles.storyCover, styles.coverFallback]}>
-        <View style={styles.previewOverlay}>
-          <View style={[styles.previewIcon, styles.previewIconLg]}>
-            <Icon name="mic" size={24} color="#00A884" />
-          </View>
-          <Text style={styles.previewTitle} numberOfLines={2}>
-            {story.title ?? "Voice note"}
-          </Text>
-          <Text style={styles.previewMeta}>
-            {story.duration ? fmtDur(story.duration) : "Voice"}
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <View style={[styles.storyCover, styles.coverFallback]}>
-      <Icon name="image" size={30} color="#00A884" />
-    </View>
-  );
-}
 
 export function StoryTile({ story, name, onPress }) {
   const kind = storyKind(story);
@@ -117,7 +40,7 @@ export function StoryTile({ story, name, onPress }) {
           onError={() => setImgErr(true)}
         />
       ) : (
-        <StoryKindPreview story={story} />
+        <StoryContentPreview story={story} />
       )}
       {/* Scrim keeps the white name readable over any cover image. */}
       <LinearGradient
@@ -272,15 +195,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: palette.line,
   },
-  // paddingBottom keeps the preview clear of the avatar/name footer below it.
-  coverFallback: { backgroundColor: "#111B21", alignItems: "center", justifyContent: "center", paddingBottom: 46, paddingHorizontal: 8 },
-  previewText: { textAlign: "center", fontSize: 15, lineHeight: 20 },
-  previewOverlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: 10, paddingBottom: 46 },
-  previewOverlayDim: { backgroundColor: "rgba(12,20,26,0.82)" },
-  previewIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,168,132,0.16)" },
-  previewIconLg: { width: 44, height: 44, borderRadius: 22 },
-  previewTitle: { color: "#FFFFFF", fontSize: 12, fontWeight: "700", textAlign: "center" },
-  previewMeta: { color: "#00A884", fontSize: 10, fontWeight: "700", textAlign: "center" },
   storyCover: { ...StyleSheet.absoluteFillObject },
   storyScrim: {
     position: "absolute",

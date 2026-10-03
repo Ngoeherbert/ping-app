@@ -28,6 +28,9 @@ export default function VoiceBubble({
   waveform,
   time,
   status,
+  // Optional replacement for the trailing mic glyph (e.g. a delete action in the
+  // story composer). Omitted, the mic shows as before.
+  trailing,
 }) {
   const player = useAudioPlayer(uri ? { uri } : null);
   const [playing, setPlaying] = useState(false);
@@ -84,7 +87,7 @@ export default function VoiceBubble({
           ))}
         </View>
 
-        <Icon name="microphone" size={14} color={isMine ? "#AAAAAA" : "#999999"} />
+        {trailing ?? <Icon name="microphone" size={14} color={isMine ? "#AAAAAA" : "#999999"} />}
       </View>
 
       {hasMeta && (

@@ -1,20 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Keyboard, Pressable, Text, View } from "react-native";
 import { useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import { useFocusEffect, useRouter } from "expo-router";
 import { setStatusBarStyle } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useStoriesData } from "../../../hooks/useStoriesData";
-import { TEXT_FONTS, fmtDur } from "./constants";
+import { TEXT_BGS, TEXT_FONTS, findLink, fmtDur } from "./constants";
 import { s } from "./styles";
 import { EditorTopBar } from "./StoryCreateChrome";
 import StoryCameraStage from "./StoryCameraStage";
 import { StoryMediaCanvas } from "./StoryMediaCanvas";
 import StoryEditorStage from "./StoryEditorStage";
 import StoryDoneStage from "./StoryDoneStage";
-import { StatusLinkSheet, StatusPrivacySheet } from "./StatusSheets";
-import StatusAudioSheet from "./StatusAudioSheet";
+import { StatusPrivacySheet } from "./StatusSheets";
+import StoryTextArea from "./StoryTextArea";
+import useVoiceRecorder from "../../messages/useVoiceRecorder";
 import { useStoryCreateDraft } from "./useStoryCreateDraft";
 import { useStoryCreateCamera } from "./useStoryCreateCamera";
 import { useStoryCreatePost } from "./useStoryCreatePost";
@@ -32,23 +33,27 @@ export default function StoryCreateForm() {
   const [recSec, setRecSec] = useState(0);
   const [published, setPublished] = useState(false);
   const camRef = useRef(null);
-  const linkSheet = useRef(null);
   const privacySheet = useRef(null);
-  const audioSheet = useRef(null);
-
   const cam = useStoryCreateCamera({
     camPerm, requestCamPerm, micPerm, requestMicPerm,
     camRef, setFacing, setFlash, setRecording, setRecSec,
   });
   const draft = useStoryCreateDraft(cam.stopClock);
   const {
-    media, setMedia, textMode, setTextMode, textVal, setTextVal,
+    media, setMedia, textMode, setTextMode, voiceMode, setVoiceMode, textVal, setTextVal,
     textBg, setTextBg, textFont, setTextFont, caption, setCaption,
-    linkInput, setLinkInput, link, setLink, privacy, setPrivacy, discard,
+    link, setLink, privacy, setPrivacy, discard,
   } = draft;
-  const { posting, doPost, applyLink } = useStoryCreatePost({ onCreateStory, setPublished });
+  const { posting, doPost } = useStoryCreatePost({ onCreateStory, setPublished });
 
-  const showCamera = !media && !textMode;
+  // A text story that mentions a link picks it up automatically as you type, so
+  // there's no link modal to open. Re-runs on every keystroke.
+  useEffect(() => {
+    setLink(findLink(textVal));
+  }, [textVal, setLink]);
+
+  // The voice screen mirrors the text status screen, so the camera stands down.
+  const showCamera = !media && !textMode && !voiceMode;
   const canPost = !!media || (textMode && textVal.trim().length > 0);
   const fontWeight = useMemo(
     () => TEXT_FONTS.find((f) => f.key === textFont)?.weight ?? "700",
@@ -70,13 +75,35 @@ export default function StoryCreateForm() {
     router.back();
   }, [discard, media, router, textMode]);
 
-  const openSheet = useCallback((which) => {
+  const openPrivacy = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
     requestAnimationFrame(() => {
-      if (which === "link") linkSheet.current?.open?.();
-      if (which === "privacy") privacySheet.current?.open?.();
+      privacySheet.current?.open?.();
     });
   }, []);
+
+  // Palette button: jump the text story's background to a different random colour.
+  // Uses the functional setter so back-to-back taps never land on the same
+  // colour twice in a row.
+  const shuffleTextBg = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setTextBg((current) => {
+      const others = TEXT_BGS.filter((c) => c !== current);
+      const pool = others.length ? others : TEXT_BGS;
+      return pool[Math.floor(Math.random() * pool.length)];
+    });
+  }, [setTextBg]);
+
+  // Text-style counterpart to the palette button: jumps the story's font to a
+  // different random one, same "always visibly changes" rule as the background.
+  const shuffleTextFont = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setTextFont((current) => {
+      const others = TEXT_FONTS.filter((f) => f.key !== current);
+      const pool = others.length ? others : TEXT_FONTS;
+      return pool[Math.floor(Math.random() * pool.length)].key;
+    });
+  }, [setTextFont]);
 
   const onPost = useCallback(() => {
     doPost({ media, textMode, textVal, textBg, textFont, caption, link });
@@ -87,10 +114,48 @@ export default function StoryCreateForm() {
     router.navigate("/my-stories");
   }, [router]);
 
-  const onAudioDone = useCallback(
-    (a) => setMedia({ kind: "audio", uri: a.uri, duration: Math.round(a.duration ?? 0) }),
-    [setMedia]
-  );
+  // Tapping anywhere outside the focused field closes the keyboard. The root is
+  // a Pressable so this catches taps that land on the canvas, camera or top bar
+  // — RN only auto-dismisses for taps inside a ScrollView.
+  const dismissKeyboard = useCallback(() => {
+    Keyboard.dismiss();
+  }, []);
+
+  // Voice notes are recorded inline in the text area — no separate sheet.
+  const recorder = useVoiceRecorder({
+    onRecorded: (t) => {
+      setMedia({ kind: "audio", uri: t.uri, duration: t.duration ?? 0 });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    },
+  });
+  // Voice tab opens the voice composer — the text status screen, adapted for
+  // voice. It does NOT start recording; the mic on that screen does.
+  const openVoiceMode = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setTextMode(false);
+    setVoiceMode(true);
+  }, [setTextMode, setVoiceMode]);
+
+  // Tapping the mic on the voice screen starts/stops the take.
+  const toggleVoiceNote = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (recorder.recording) {
+      recorder.stop();
+      return;
+    }
+    // A voice note replaces whatever else the story held.
+    setMedia(null);
+    setTextMode(false);
+    recorder.start();
+  }, [recorder, setMedia, setTextMode]);
+  const voiceTake = media?.kind === "audio" ? { uri: media.uri, duration: media.duration } : null;
+
+  // Discard the take and drop back to the empty voice screen, where the record
+  // control reappears so it can be recorded again.
+  const deleteVoiceNote = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setMedia(null);
+  }, [setMedia]);
 
   if (published) {
     return (
@@ -104,7 +169,9 @@ export default function StoryCreateForm() {
   }
 
   return (
-    <View style={s.root}>
+    // accessible={false} keeps this from becoming a screen-reader element — it
+    // exists only to catch outside taps. Child pressables still win the tap.
+    <Pressable style={s.root} onPress={dismissKeyboard} accessible={false}>
       <StoryCameraStage
         camRef={camRef}
         facing={facing}
@@ -121,24 +188,33 @@ export default function StoryCreateForm() {
         takePhoto={() => cam.takePhoto(setMedia)}
         startVideo={() => cam.startVideo(setMedia)}
         pickMedia={() => cam.pickMedia(setMedia)}
-        onText={() => { Haptics.selectionAsync().catch(() => {}); setTextMode(true); }}
-        onVoice={() => audioSheet.current?.open?.()}
-        onLink={() => openSheet("link")}
+        onText={() => { Haptics.selectionAsync().catch(() => {}); setVoiceMode(false); setTextMode(true); }}
+        onVoice={openVoiceMode}
         bottom={Math.max(insets.bottom, 14)}
       />
-      <StoryMediaCanvas
-        media={media}
-        textMode={textMode}
-        textVal={textVal}
-        textBg={textBg}
-        fontWeight={fontWeight}
-      />
+      <StoryMediaCanvas media={media} textMode={textMode} voiceMode={voiceMode} textBg={textBg} />
+      {/* One centred surface: the text status screen and the voice screen. */}
+      {textMode || voiceMode || voiceTake || recorder.recording ? (
+        <StoryTextArea
+          textMode={textMode}
+          textVal={textVal}
+          setTextVal={setTextVal}
+          fontWeight={fontWeight}
+          voiceMode={voiceMode}
+          take={voiceTake}
+          recording={recorder.recording}
+          recordingSec={Math.floor(recorder.durationMillis / 1000)}
+          onToggleRecord={toggleVoiceNote}
+          onDeleteTake={deleteVoiceNote}
+        />
+      ) : null}
       <EditorTopBar
         top={insets.top}
         onBack={goBack}
         onFlip={cam.flip}
         showFlip={showCamera}
-        onDelete={media || textMode ? discard : null}
+        onStyle={textMode ? shuffleTextFont : null}
+        onShuffle={shuffleTextBg}
         canPost={canPost}
         posting={posting}
         onPost={onPost}
@@ -149,43 +225,20 @@ export default function StoryCreateForm() {
           <Text style={s.recText}>{fmtDur(recSec)} / 1:00</Text>
         </View>
       ) : null}
-      {media || textMode ? (
+      {media || textMode || voiceMode ? (
         <StoryEditorStage
-          media={media}
           textMode={textMode}
-          textVal={textVal}
-          setTextVal={setTextVal}
-          textBg={textBg}
-          setTextBg={setTextBg}
-          textFont={textFont}
-          setTextFont={setTextFont}
-          fontWeight={fontWeight}
+          voiceMode={voiceMode}
           caption={caption}
           setCaption={setCaption}
           myProfile={myProfile}
           privacy={privacy}
-          onPrivacy={() => openSheet("privacy")}
+          onPrivacy={openPrivacy}
           link={link}
           setLink={setLink}
-          onLink={() => openSheet("link")}
-          onVoice={() => audioSheet.current?.open?.()}
           bottom={Math.max(insets.bottom, 12)}
         />
       ) : null}
-      <StatusLinkSheet
-        ref={linkSheet}
-        linkInput={linkInput}
-        setLinkInput={setLinkInput}
-        applyLink={() =>
-          applyLink({
-            linkInput,
-            setLink,
-            setLinkInput,
-            close: () => linkSheet.current?.close?.(),
-          })
-        }
-        onClose={() => {}}
-      />
       <StatusPrivacySheet
         ref={privacySheet}
         privacy={privacy}
@@ -193,8 +246,7 @@ export default function StoryCreateForm() {
         sheetRef={privacySheet}
         onClose={() => {}}
       />
-      <StatusAudioSheet ref={audioSheet} onDone={onAudioDone} />
-    </View>
+    </Pressable>
   );
 }
 

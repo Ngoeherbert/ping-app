@@ -15,7 +15,9 @@ function ImageContent({ uri }) {
       <Image
         source={{ uri }}
         style={StyleSheet.absoluteFill}
-        contentFit="cover"
+        // "contain" fits the whole photo inside the frame — the letterbox bars
+        // come from the black container — instead of cropping it to fill.
+        contentFit="contain"
         transition={200}
         onLoad={() => setPhase("ready")}
         onError={() => setPhase("error")}

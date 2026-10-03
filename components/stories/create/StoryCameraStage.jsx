@@ -8,7 +8,7 @@ export default function StoryCameraStage({
   camRef, facing, flash, showCamera, focused,
   camPerm, needCam, toggleFlash, flip,
   recording, stopVideo, takePhoto, startVideo,
-  pickMedia, onText, onVoice, onLink, bottom,
+  pickMedia, onText, onVoice, bottom,
 }) {
   return (
     <>
@@ -56,10 +56,6 @@ export default function StoryCameraStage({
           <Pressable onPress={onVoice} style={s.pickCard} accessibilityRole="button" accessibilityLabel="Record voice status">
             <Icon name="mic" size={22} color="#00A884" />
             <Text style={s.pickLabel}>Voice</Text>
-          </Pressable>
-          <Pressable onPress={onLink} style={s.pickCard} accessibilityRole="button" accessibilityLabel="Add link">
-            <Icon name="link" size={22} color="#00A884" />
-            <Text style={s.pickLabel}>Link</Text>
           </Pressable>
         </ScrollView>
         </View>

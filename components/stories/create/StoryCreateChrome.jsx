@@ -17,7 +17,7 @@ export function CaptureBtn({ label, hint, onPress, primary }) {
   );
 }
 
-export function EditorTopBar({ top, onBack, onFlip, showFlip, onDelete, canPost, posting, onPost }) {
+export function EditorTopBar({ top, onBack, onFlip, showFlip, onStyle, onShuffle, canPost, posting, onPost }) {
   return (
     <View style={[s.topBar, { paddingTop: top + 8 }]}>
       <Pressable onPress={onBack} style={s.topBtn} accessibilityRole="button" accessibilityLabel="Back">
@@ -29,9 +29,14 @@ export function EditorTopBar({ top, onBack, onFlip, showFlip, onDelete, canPost,
           <Icon name="rotateCamera" size={22} color="#FFFFFF" />
         </Pressable>
       ) : null}
-      {onDelete ? (
-        <Pressable onPress={onDelete} style={s.topBtn} accessibilityRole="button" accessibilityLabel="Discard">
-          <Icon name="delete" size={22} color="#FFFFFF" />
+      {onStyle ? (
+        <Pressable onPress={onStyle} style={s.topBtn} accessibilityRole="button" accessibilityLabel="Shuffle text style">
+          <Icon name="gameWord" size={22} color="#FFFFFF" />
+        </Pressable>
+      ) : null}
+      {onShuffle ? (
+        <Pressable onPress={onShuffle} style={s.topBtn} accessibilityRole="button" accessibilityLabel="Shuffle background colour">
+          <Icon name="palette" size={22} color="#FFFFFF" />
         </Pressable>
       ) : null}
       <Pressable

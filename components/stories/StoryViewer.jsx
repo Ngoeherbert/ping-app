@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Alert, Dimensions, Easing, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import StoryContent from "./StoryContent";
 import StoryActivityModal from "./StoryActivityModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,7 +12,7 @@ import Icon from "../ui/Icon";
 import VerifiedBadge from "../ui/VerifiedBadge";
 import { USER_PROFILES, MY_USER_ID, MY_PROFILE } from "../../lib/mockData";
 import { radius } from "../../constants/radius";
-import { useActiveStoryIndex, useActiveUserId, useStories, closeStory, nextStory, nextUser, prevStory, prevUser, markSeen, deleteStory, storyKind, storyUserOrder, storyViewsCount, userNeighbor } from "../../lib/stores/storyStore";
+import { useActiveStoryIndex, useActiveUserId, useStories, closeStory, nextStory, nextUser, prevStory, prevUser, markSeen, deleteStory, hideStory, storyKind, storyUserOrder, storyViewsCount, userNeighbor } from "../../lib/stores/storyStore";
 
 const DURATION = 5000;
 const SCREEN_W = Dimensions.get("window").width;
@@ -51,27 +50,33 @@ function isMineStory(story) {
 }
 
 /**
- * Your own story renders as a bottom-anchored column — caption, divider, then
- * the view count. Because the stack is anchored to the BOTTOM edge, the caption
- * is always laid out ABOVE the divider however many lines it wraps to. Someone
- * else's story gets the caption alone, lifted clear of the reply bar. The count
- * is a button that opens the activity list, so the caption ignores touches.
+ * Bottom overlay, one bottom-anchored column: caption first, then a divider,
+ * then whatever belongs below it — your view count on your own story, the reply
+ * bar on someone else's. Because the stack is anchored to the BOTTOM edge, the
+ * caption is always laid out ABOVE the divider however many lines it wraps to.
+ *
+ * The divider only appears when there's something to divide: always on your own
+ * story (the view count sits below it), but only when a caption exists on someone
+ * else's — otherwise it's a bare line floating over the media. The count is a
+ * button that opens the activity list, so the caption itself ignores touches.
  */
-function CaptionOverlay({ story, captionBottom, viewsBottom, onPressActivity }) {
+function CaptionOverlay({ story, replyTop, viewsBottom, onPressActivity }) {
   const caption = captionOf(story);
   const mine = isMineStory(story);
   const views = storyViewsCount(story);
+  // Someone else's caption-less story has nothing in this overlay at all.
+  if (!mine && !caption) return null;
   const bubble = caption ? (
     <View style={styles.captionWrap} pointerEvents="none">
       <Text style={styles.captionText} numberOfLines={3}>{caption}</Text>
     </View>
   ) : null;
 
-  if (mine) {
-    return (
-      <View style={[styles.captionStack, { bottom: viewsBottom }]}>
-        {bubble}
-        <View style={styles.overlayDivider} />
+  return (
+    <View style={[styles.captionStack, { bottom: mine ? viewsBottom : replyTop }]}>
+      {bubble}
+      <View style={styles.overlayDivider} />
+      {mine ? (
         <Pressable
           onPress={() => onPressActivity(story)}
           hitSlop={8}
@@ -84,12 +89,9 @@ function CaptionOverlay({ story, captionBottom, viewsBottom, onPressActivity }) 
             {views} {views === 1 ? "view" : "views"}
           </Text>
         </Pressable>
-      </View>
-    );
-  }
-
-  if (!bubble) return null;
-  return <View style={[styles.captionStack, { bottom: captionBottom }]}>{bubble}</View>;
+      ) : null}
+    </View>
+  );
 }
 export default function StoryViewer() {
   const stories = useStories();
@@ -125,19 +127,13 @@ export default function StoryViewer() {
   const author = useMemo(() => authorOf(story), [story]);
   // Own stories differ from others': no reply bar, plus a view count.
   const isMine = isMineStory(story);
-  // Caption is lifted clear of the bottom edge, high enough to also clear the
-  // reply bar that only other people's stories show.
-  const captionBottom = Math.max(insets.bottom, 10) + 76;
+  // Other people's stories draw their divider directly above the input area, so the
+  // overlay stack's bottom edge IS the top of the reply bar: its own bottom
+  // padding + 8pt paddingTop + the 44pt input. Deriving it keeps the divider
+  // flush against the input instead of guessing a fixed offset above it.
+  const replyBarTop = Math.max(insets.bottom, 10) + 6 + 8 + 44;
   // The view count sits low in the bottom-left corner, under the caption.
   const viewsBottom = Math.max(insets.bottom, 10) + 16;
-  // Edge scrims keep the header and bottom bar legible over any frame. Both sit
-  // flush against the screen edges so they cover the safe-area insets as well,
-  // and each extends past the chrome it sits behind.
-  const topScrimHeight = Math.max(insets.top, 8) + 84;
-  const bottomScrimHeight = Math.max(insets.bottom, 10) + 168;
-  // Only photo/video frames need the edge scrims. Text, voice and link stories
-  // render on their own opaque surfaces, where the scrim just muddies them.
-  const wantsScrim = kind === "image" || kind === "video";
   const progress = useRef(new Animated.Value(0)).current;
   const anim = useRef(null);
   const startRef = useRef(0);
@@ -359,7 +355,18 @@ export default function StoryViewer() {
     closeStory();
   }, []);
   const [menuOpen, setMenuOpen] = useState(false);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  // The story must not keep playing (or run its timer) behind the options sheet.
+  // Every exit path — backdrop, close button, hardware back, or picking an action
+  // — goes through closeMenu so playback always resumes.
+  const openMenu = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    pause();
+    setMenuOpen(true);
+  }, [pause]);
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    resume();
+  }, [resume]);
   const [activityStory, setActivityStory] = useState(null);
   // The activity sheet is owner-only: it's the audience for your own story.
   const openActivity = useCallback((target) => {
@@ -367,12 +374,12 @@ export default function StoryViewer() {
     setActivityStory(target);
   }, []);
   const forwardStory = useCallback(() => {
-    setMenuOpen(false);
+    closeMenu();
     Clipboard.setStringAsync(`ping://story/${story?.id ?? ""}`).catch(() => {});
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-  }, [story?.id]);
+  }, [closeMenu, story?.id]);
   const saveStoryMedia = useCallback(async () => {
-    setMenuOpen(false);
+    closeMenu();
     const uri = story?.cover ?? story?.uri;
     if (!uri) {
       Alert.alert("Nothing to save", "This story has no media to download.");
@@ -384,9 +391,9 @@ export default function StoryViewer() {
     } catch {
       Alert.alert("Couldn't save", "Allow photo access in Settings to save this story.");
     }
-  }, [story]);
+  }, [closeMenu, story]);
   const reportStory = useCallback(() => {
-    setMenuOpen(false);
+    closeMenu();
     Alert.alert("Report story", `Report this story from @${author.handle?.replace("@", "") ?? "user"}? Our team will review it.`, [
       { text: "Cancel", style: "cancel" },
       {
@@ -398,9 +405,26 @@ export default function StoryViewer() {
         },
       },
     ]);
-  }, [author.handle]);
+  }, [closeMenu, author.handle]);
+  const hideStoryAction = useCallback(() => {
+    closeMenu();
+    if (!story) return;
+    Alert.alert("Hide story", "This story will no longer appear in your stories.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Hide",
+        style: "destructive",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          // Closing the session is handled by the store when this was the
+          // story being viewed.
+          hideStory(story.id);
+        },
+      },
+    ]);
+  }, [closeMenu, story]);
   const removeStory = useCallback(() => {
-    setMenuOpen(false);
+    closeMenu();
     if (!story) return;
     Alert.alert("Delete story", "This can't be undone.", [
       { text: "Cancel", style: "cancel" },
@@ -414,7 +438,7 @@ export default function StoryViewer() {
         },
       },
     ]);
-  }, [story]);
+  }, [closeMenu, story]);
   if (!visible || !story) return null;
   return (
     <Modal visible={visible} animationType="fade" statusBarTranslucent presentationStyle="fullScreen" onRequestClose={handleClose}>
@@ -441,29 +465,6 @@ export default function StoryViewer() {
             </Animated.View>
           ))}
         </View>
-        {/* Edge scrims sit under the chrome but over the media, so header and
-            bottom-bar text stay readable on any frame. pointerEvents keeps them
-            from swallowing the tap zones below. Omitted for kinds that are
-            already opaque. */}
-        {wantsScrim ? (
-          <>
-            <LinearGradient
-              // `locations` holds the strong opacity across the whole chrome band
-              // and only fades past its inner edge — a plain fade left the header
-              // row (which sits at the BOTTOM of this scrim) almost uncovered.
-              colors={["rgba(0,0,0,0.78)", "rgba(0,0,0,0.72)", "rgba(0,0,0,0)"]}
-              locations={[0, 0.8, 1]}
-              style={[styles.edgeScrim, { top: 0, height: topScrimHeight }]}
-              pointerEvents="none"
-            />
-            <LinearGradient
-              colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.72)", "rgba(0,0,0,0.88)"]}
-              locations={[0, 0.24, 1]}
-              style={[styles.edgeScrim, { bottom: 0, height: bottomScrimHeight }]}
-              pointerEvents="none"
-            />
-          </>
-        ) : null}
         <View style={styles.tapRow} {...pan.panHandlers}>
           <Pressable style={styles.tapLeft} onPress={goPrev} onLongPress={hold} onPressOut={holdEnd} delayLongPress={220} accessibilityRole="button" accessibilityLabel="Previous story" />
           <Pressable style={styles.tapRight} onPress={goNext} onLongPress={hold} onPressOut={holdEnd} delayLongPress={220} accessibilityRole="button" accessibilityLabel="Next story" />
@@ -492,7 +493,7 @@ export default function StoryViewer() {
               {!!author.handle && <Text style={styles.handle} numberOfLines={1}>{author.handle}</Text>}
             </View>
             <Pressable
-              onPress={() => { Haptics.selectionAsync().catch(() => {}); setMenuOpen(true); }}
+              onPress={openMenu}
               hitSlop={10}
               style={styles.iconBtn}
               accessibilityRole="button"
@@ -524,7 +525,7 @@ export default function StoryViewer() {
         {/* Rendered ABOVE the tap zones so the eye stays tappable — the layer
             content sits under tapRow, which covers the screen. Drawn once for
             the active story instead of once per swipe layer. */}
-        <CaptionOverlay story={story} captionBottom={captionBottom} viewsBottom={viewsBottom} onPressActivity={openActivity} />
+        <CaptionOverlay story={story} replyTop={replyBarTop} viewsBottom={viewsBottom} onPressActivity={openActivity} />
         <ActionSheet visible={menuOpen} onRequestClose={closeMenu}>
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -535,7 +536,7 @@ export default function StoryViewer() {
           <View style={styles.menuCard}>
             <View style={styles.menuHandle} />
             <Pressable onPress={forwardStory} style={styles.menuRow} accessibilityRole="button" accessibilityLabel="Forward story">
-              <Icon name="share" size={20} color="#FFFFFF" />
+              <Icon name="forward" size={20} color="#FFFFFF" />
               <Text style={styles.menuText}>Forward</Text>
             </Pressable>
             {isMine ? (
@@ -549,8 +550,12 @@ export default function StoryViewer() {
                   <Icon name="download" size={20} color="#FFFFFF" />
                   <Text style={styles.menuText}>Save</Text>
                 </Pressable>
+                <Pressable onPress={hideStoryAction} style={styles.menuRow} accessibilityRole="button" accessibilityLabel="Hide story">
+                  <Icon name="mute" size={20} color="#FFFFFF" />
+                  <Text style={[styles.menuText, { color: "#FFFFFF" }]}>Hide</Text>
+                </Pressable>
                 <Pressable onPress={reportStory} style={styles.menuRow} accessibilityRole="button" accessibilityLabel="Report story">
-                  <Icon name="flag" size={20} color="#FF6B6B" />
+                  <Icon name="report" size={20} color="#FF6B6B" />
                   <Text style={[styles.menuText, { color: "#FF6B6B" }]}>Report</Text>
                 </Pressable>
               </>
@@ -569,7 +574,6 @@ export default function StoryViewer() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000000" },
   contentClip: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
-  edgeScrim: { position: "absolute", left: 0, right: 0 },
   tapRow: { ...StyleSheet.absoluteFillObject, flexDirection: "row" },
   tapLeft: { width: "30%", height: "100%" },
   tapRight: { flex: 1, height: "100%" },
@@ -586,8 +590,8 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   captionStack: { position: "absolute", left: 16, right: 16, alignItems: "center" },
   captionWrap: { alignSelf: "center", maxWidth: "100%", marginBottom: 20, backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9 },
-  captionText: { color: "#FFFFFF", fontSize: 14, lineHeight: 19, fontWeight: "500" },
-  overlayDivider: { alignSelf: "stretch", height: StyleSheet.hairlineWidth, backgroundColor: "rgba(255, 255, 255, 0.68)" },
+  captionText: { color: "#FFFFFF", fontSize: 20, lineHeight: 19, fontWeight: "500" },
+  overlayDivider: { alignSelf: "stretch", height: StyleSheet.hairlineWidth, backgroundColor: "rgba(255, 255, 255, 0.31)" },
   // Padded with its own tint now that the story no longer has a bottom scrim.
   viewsRow: { alignSelf: "flex-start", marginTop: 10, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.4)" },
   viewsCountText: { color: "rgba(255,255,255,0.9)", fontSize: 12, fontWeight: "700" },
