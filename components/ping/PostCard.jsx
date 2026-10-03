@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import Avatar from "../ui/Avatar";
 import Icon from "../ui/Icon";
+import FilledIcon from "../../constants/FilledIcon";
 import Card from "../ui/Card";
 import VerifiedBadge from "../ui/VerifiedBadge";
 import { palette } from "../../constants/colors";
@@ -16,7 +17,8 @@ const SEE_MORE_LIMIT = 90;
 const AUDIENCE_ICONS = { public: "globe", friends: "users", private: "lock" };
 
 export function PostHeader({ post, onFollow, onMore, onProfilePress }) {
-  const { user, avatar, verified, verifiedVariant, time, tagged, showFollow } = post;
+  const { user, avatar, verified, verifiedVariant, time, tagged, showFollow } =
+    post;
 
   const handleProfilePress = () => {
     onProfilePress && onProfilePress(post);
@@ -44,7 +46,11 @@ export function PostHeader({ post, onFollow, onMore, onProfilePress }) {
             {user}
           </Text>
           {verified && (
-            <VerifiedBadge variant={verifiedVariant || "blue"} size={18} inline />
+            <VerifiedBadge
+              variant={verifiedVariant || "blue"}
+              size={18}
+              inline
+            />
           )}
         </View>
         <View style={styles.timeRow}>
@@ -115,7 +121,9 @@ export function PostBody({ post }) {
       </Text>
 
       {post.tags.length > 0 && (
-        <Text style={styles.tags}>{post.tags.map((t) => `#${t}`).join(" ")}</Text>
+        <Text style={styles.tags}>
+          {post.tags.map((t) => `#${t}`).join(" ")}
+        </Text>
       )}
     </>
   );
@@ -141,9 +149,19 @@ export function PostMedia({ media, aspectRatio = 1 }) {
   );
 }
 
-export function PostActions({ post, liked, saved, onLike, onComment, onShare, onSave }) {
+export function PostActions({
+  post,
+  liked,
+  saved,
+  onLike,
+  onComment,
+  onShare,
+  onSave,
+}) {
   const likeCount =
-    post.likes + (liked && !post.liked ? 1 : 0) - (!liked && post.liked ? 1 : 0);
+    post.likes +
+    (liked && !post.liked ? 1 : 0) -
+    (!liked && post.liked ? 1 : 0);
 
   return (
     <View style={styles.footer}>
@@ -154,13 +172,14 @@ export function PostActions({ post, liked, saved, onLike, onComment, onShare, on
           accessibilityRole="button"
           accessibilityLabel={`Like ${post.user}`}
         >
-          <Icon
-            name="heart"
-            size={22}
-            color={liked ? LIKE_PINK : palette.muted}
-          />
+          {liked ? (
+            <FilledIcon name="heart" size={22} color={LIKE_PINK} />
+          ) : (
+            <Icon name="heart" size={22} color={palette.muted} />
+          )}
           <Text style={styles.actionText}>
-            <Text style={styles.actionCount}>{formatLikes(likeCount)}</Text> Likes
+            <Text style={styles.actionCount}>{formatLikes(likeCount)}</Text>{" "}
+            Likes
           </Text>
         </Pressable>
 
@@ -193,11 +212,11 @@ export function PostActions({ post, liked, saved, onLike, onComment, onShare, on
           accessibilityRole="button"
           accessibilityLabel="Bookmark"
         >
-          <Icon
-            name="bookmark"
-            size={22}
-            color={saved ? palette.primary : palette.muted}
-          />
+          {saved ? (
+            <FilledIcon name="bookmark" size={22} color={palette.primary} />
+          ) : (
+            <Icon name="bookmark" size={22} color={palette.muted} />
+          )}
         </Pressable>
       </View>
     </View>
@@ -261,7 +280,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-   meta: {
+  meta: {
     flex: 1,
     minWidth: 0,
     paddingVertical: 4,

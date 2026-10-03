@@ -2,6 +2,7 @@ import React from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Avatar from "../ui/Avatar";
 import Icon from "../ui/Icon";
+import FilledIcon from "../../constants/FilledIcon";
 import { radius } from "../../constants/radius";
 
 /**
@@ -34,7 +35,7 @@ function PersonRow({ person }) {
       </View>
       {person.reacted ? (
         <View style={s.reactionBadge}>
-          <Icon name="heart" size={12} color="#FF4D8D" strokeWidth={2} />
+          <FilledIcon name="heart" size={12} color="#FF4D8D" />
         </View>
       ) : null}
       {!!person.time && <Text style={s.time}>{person.time}</Text>}

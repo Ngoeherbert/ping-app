@@ -1,24 +1,47 @@
 import React, { useState, useCallback, forwardRef } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import Sheet from "../ui/CustomModalSheet";
 import Avatar from "../ui/Avatar";
 import Icon from "../ui/Icon";
+import FilledIcon from "../../constants/FilledIcon";
 import VerifiedBadge from "../ui/VerifiedBadge";
 import { palette } from "../../constants/colors";
-import { getComments, getCommentReplies, getProfileById } from "../../lib/mockData";
+import { MY_AVATAR, getProfileById } from "../../lib/mockData";
+import { useComments, useReplies, getCommentState } from "../../lib/stores/commentStore";
 
-const CommentModal = forwardRef(function CommentModal(
-  { postId, onClose, onPostComment },
-  ref
-) {
-  const [commentText, setCommentText] = useState("");
-  const comments = postId ? getComments(postId) : [];
+const LIKE_PINK = "#F0407F";
+const ME = { user: "You", handle: "@you", avatar: MY_AVATAR };
+
+const CommentModal = forwardRef(function CommentModal({ postId, onClose }, ref) {
+  const [draft, setDraft] = useState("");
+  // Which comment the composer is replying to; null means a top-level comment.
+  const [replyTo, setReplyTo] = useState(null);
+  const comments = useComments(postId);
+  const { addComment, addReply, toggleLike } = getCommentState();
 
   const handleSubmit = useCallback(() => {
-    if (!commentText.trim() || !postId) return;
-    onPostComment?.(postId, commentText.trim());
-    setCommentText("");
-  }, [commentText, postId, onPostComment]);
+    const text = draft.trim();
+    if (!text || !postId) return;
+    if (replyTo) addReply(replyTo.id, { ...ME, text });
+    else addComment(postId, { ...ME, text });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setDraft("");
+    setReplyTo(null);
+  }, [draft, postId, replyTo, addComment, addReply]);
+
+  const handleLike = useCallback(
+    (id) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      toggleLike(id);
+    },
+    [toggleLike]
+  );
+
+  const startReply = useCallback((comment) => {
+    Haptics.selectionAsync().catch(() => {});
+    setReplyTo(comment);
+  }, []);
 
   return (
     <Sheet
@@ -28,14 +51,29 @@ const CommentModal = forwardRef(function CommentModal(
       showCloseButton
       footer={
         <View style={styles.inputRow}>
-          <Avatar uri="https://picsum.photos/seed/me/120/120" name="You" size={32} />
+          <Avatar uri={ME.avatar} name={ME.user} size={32} />
           <View style={styles.inputContainer}>
+            {replyTo ? (
+              <View style={styles.replyingBar}>
+                <Text style={styles.replyingText} numberOfLines={1}>
+                  Replying to {replyTo.user}
+                </Text>
+                <Pressable
+                  onPress={() => setReplyTo(null)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel reply"
+                >
+                  <Icon name="close" size={14} color={palette.muted} />
+                </Pressable>
+              </View>
+            ) : null}
             <TextInput
               style={styles.commentInput}
-              placeholder="Add a comment..."
+              placeholder={replyTo ? "Add a reply..." : "Add a comment..."}
               placeholderTextColor={palette.muted}
-              value={commentText}
-              onChangeText={setCommentText}
+              value={draft}
+              onChangeText={setDraft}
               onSubmitEditing={handleSubmit}
               returnKeyType="send"
               blurOnSubmit={false}
@@ -43,11 +81,11 @@ const CommentModal = forwardRef(function CommentModal(
             />
           </View>
           <Pressable
-            style={[styles.sendBtn, !commentText.trim() && styles.sendBtnDisabled]}
+            style={[styles.sendBtn, !draft.trim() && styles.sendBtnDisabled]}
             onPress={handleSubmit}
-            disabled={!commentText.trim()}
+            disabled={!draft.trim()}
             accessibilityRole="button"
-            accessibilityLabel="Send comment"
+            accessibilityLabel={replyTo ? "Send reply" : "Send comment"}
           >
             <Icon name="send" size={20} color="#FFFFFF" />
           </Pressable>
@@ -93,13 +131,27 @@ const CommentModal = forwardRef(function CommentModal(
                 <Text style={styles.commentTime}>{comment.time}</Text>
                 <Pressable
                   style={styles.commentAction}
+                  onPress={() => handleLike(comment.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Like comment`}
+                  accessibilityLabel={comment.liked ? "Unlike comment" : "Like comment"}
                 >
-                  <Icon name="heart" size={16} color={palette.muted} />
-                  <Text style={styles.commentActionText}>{comment.likes}</Text>
+                  {comment.liked ? (
+                    <FilledIcon name="heart" size={16} color={LIKE_PINK} />
+                  ) : (
+                    <Icon name="heart" size={16} color={palette.muted} />
+                  )}
+                  <Text style={[styles.commentActionText, comment.liked && styles.commentActionOn]}>
+                    {comment.likes}
+                  </Text>
                 </Pressable>
-                <Text style={styles.commentActionText}>Reply</Text>
+                <Pressable
+                  style={styles.commentAction}
+                  onPress={() => startReply(comment)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Reply to ${comment.user}`}
+                >
+                  <Text style={styles.commentActionText}>Reply</Text>
+                </Pressable>
               </View>
             </View>
           </View>
@@ -114,7 +166,7 @@ const CommentModal = forwardRef(function CommentModal(
 export default CommentModal;
 
 function CommentReplies({ commentId }) {
-  const replies = getCommentReplies(commentId);
+  const replies = useReplies(commentId);
   if (!replies.length) return null;
 
   return (
@@ -220,6 +272,24 @@ const styles = StyleSheet.create({
   },
   commentActionText: {
     fontSize: 12,
+    color: palette.muted,
+  },
+  commentActionOn: {
+    color: LIKE_PINK,
+    fontWeight: "700",
+  },
+  replyingBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 7,
+  },
+  replyingText: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "600",
     color: palette.muted,
   },
   repliesContainer: {

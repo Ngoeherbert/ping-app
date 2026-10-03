@@ -6,10 +6,13 @@ import {
 
 export function useCommentsData(postId) {
   const comments = useComments(postId);
+  const { addComment, addReply, toggleLike } = getCommentState();
 
   return {
     comments,
-    addComment: getCommentState().addComment,
+    addComment,
+    addReply,
+    onToggleCommentLike: toggleLike,
   };
 }
 

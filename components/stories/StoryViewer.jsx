@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, Alert, Dimensions, Easing, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import StoryContent from "./StoryContent";
 import StoryActivityModal from "./StoryActivityModal";
+import FilledIcon from "../../constants/FilledIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
@@ -515,7 +516,11 @@ export default function StoryViewer() {
               <TextInput value={reply} onChangeText={setReply} placeholder="Reply..." placeholderTextColor="rgba(255,255,255,0.7)" style={styles.input} onFocus={pause} onBlur={resume} returnKeyType="send" onSubmitEditing={() => { if (!reply.trim()) return; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setReply(""); }} />
             </View>
             <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setLiked((v) => !v); }} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={liked ? "Unlike story" : "Like story"}>
-              <Icon name="heart" size={26} color={liked ? "#F0407F" : "#FFFFFF"} />
+              {liked ? (
+                <FilledIcon name="heart" size={26} color="#F0407F" />
+              ) : (
+                <Icon name="heart" size={26} color="#FFFFFF" />
+              )}
             </Pressable>
             <Pressable onPress={() => { if (reply.trim()) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setReply(""); } }} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Send reply">
               <Icon name="send" size={24} color="#FFFFFF" />

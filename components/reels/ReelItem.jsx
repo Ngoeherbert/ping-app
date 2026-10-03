@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import FilledIcon, { hasFilled } from "../../constants/FilledIcon";
 import { useVideoPlayer, VideoView } from "expo-video";
 import * as Haptics from "expo-haptics";
 
@@ -106,7 +107,11 @@ function MusicDisc({ uri, spinning }) {
   );
 }
 
-/** One tappable button in the right-hand action rail. */
+/**
+ * One tappable button in the right-hand action rail. An active action renders
+ * FILLED where a filled path exists (like, save), so "on" reads instantly —
+ * the same trick the verified badge uses with its solid tick.
+ */
 function RailAction({
   icon,
   label,
@@ -115,6 +120,7 @@ function RailAction({
   onPress,
   accessibilityLabel,
 }) {
+  const solid = active && hasFilled(icon);
   return (
     <Pressable
       onPress={onPress}
@@ -123,12 +129,16 @@ function RailAction({
       accessibilityLabel={accessibilityLabel}
     >
       <View style={styles.railIconWrap}>
-        <Icon
-          name={icon}
-          size={30}
-          color={active ? activeColor : "#FFFFFF"}
-          strokeWidth={active ? 2.2 : 1.8}
-        />
+        {solid ? (
+          <FilledIcon name={icon} size={30} color={activeColor} />
+        ) : (
+          <Icon
+            name={icon}
+            size={30}
+            color={active ? activeColor : "#FFFFFF"}
+            strokeWidth={active ? 2.2 : 1.8}
+          />
+        )}
       </View>
       <Text style={styles.railLabel}>{label}</Text>
     </Pressable>
@@ -510,7 +520,7 @@ export default function ReelItem({
         />
 
         <RailAction
-          icon="share"
+          icon="forward"
           label={formatLikes(reel.shares)}
           onPress={handleShare}
           accessibilityLabel={`Share ${reel.user}'s reel`}
